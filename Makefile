@@ -36,9 +36,8 @@ setup: ## First-time setup: copy .env.example → .env and generate secrets
 
 .PHONY: keygen
 keygen: ## Generate random secrets and Supabase JWT keys into .env
-	@command -v python3 >/dev/null 2>&1 || { echo "python3 required"; exit 1; }
-	@python3 scripts/keygen.py
-	@echo "  $(GREEN)✓$(RESET) Secrets written to .env"
+	@command -v node >/dev/null 2>&1 || { echo "node (24+) required — install via mise"; exit 1; }
+	@node scripts/keygen.js
 
 .PHONY: install-hooks
 install-hooks: ## Install pre-commit hooks
