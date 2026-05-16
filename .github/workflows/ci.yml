@@ -3,12 +3,13 @@
 #
 # Triggers: push to any branch + PR to main.
 # Jobs (all must pass to merge):
-#   secrets    → gitleaks secret scan
-#   quality-py → ruff + mypy  (Phase 1+ when apps/api exists)
-#   quality-ts → biome + tsc  (Phase 1+ when apps/web exists)
-#   test-py    → pytest       (Phase 1+)
-#   test-ts    → vitest       (Phase 1+)
-#   audit      → pip-audit + pnpm audit
+#   secrets        → gitleaks secret scan
+#   validate-infra → repo structure, .gitignore, compose syntax, .env.example
+#   quality-py     → ruff + mypy  (Phase 1+ when apps/api exists)
+#   quality-ts     → biome + tsc  (Phase 1+ when apps/web exists)
+#   test-py        → pytest       (Phase 1+)
+#   test-ts        → vitest       (Phase 1+)
+#   audit          → pip-audit + pnpm audit
 # =============================================================================
 
 name: CI
@@ -40,6 +41,88 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure validation — no running stack needed; pure static checks.
+  # Verifies the repo structure, .gitignore, .env.example, and compose syntax.
+  # ---------------------------------------------------------------------------
+  validate-infra:
+    name: Validate infrastructure
+    runs-on: ubuntu-latest
+    needs: secrets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Required files present
+        run: |
+          missing=0
+          files=(
+            ".gitignore"
+            ".env.example"
+            "README.md"
+            "PHASE_LOG.md"
+            "docker-compose.yml"
+            "Makefile"
+            ".pre-commit-config.yaml"
+            ".github/PULL_REQUEST_TEMPLATE.md"
+            ".github/workflows/ci.yml"
+            "scripts/keygen.js"
+            "infra/supabase/kong.yml"
+            "infra/supabase/volumes/db/roles.sql"
+            "infra/supabase/volumes/db/jwt.sql"
+            "infra/supabase/volumes/db/realtime.sql"
+            "infra/supabase/volumes/db/webhooks.sql"
+            "docs/adr/0000-template.md"
+          )
+          for f in "${files[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "MISSING: $f"
+              missing=$((missing+1))
+            fi
+          done
+          [ "$missing" -eq 0 ] && echo "All required files present." || exit 1
+
+      - name: .gitignore covers secrets and build artefacts
+        run: |
+          fail=0
+          for p in ".env" "node_modules" "__pycache__" "*.pem" ".DS_Store"; do
+            grep -q "$p" .gitignore || { echo "MISSING pattern in .gitignore: $p"; fail=1; }
+          done
+          [ "$fail" -eq 0 ] && echo ".gitignore OK" || exit 1
+
+      - name: .env.example uses only placeholder values for secrets
+        run: |
+          fail=0
+          keys=(
+            SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY
+            DIFY_SECRET_KEY DIFY_SANDBOX_API_KEY WEKALA_SECRET_KEY
+            MEILI_MASTER_KEY N8N_ENCRYPTION_KEY N8N_USER_MANAGEMENT_JWT_SECRET
+            LANGFUSE_SECRET_KEY LANGFUSE_NEXTAUTH_SECRET LANGFUSE_SALT
+            CLICKHOUSE_PASSWORD WEKALA_SUPABASE_SERVICE_KEY NEXT_PUBLIC_SUPABASE_ANON_KEY
+          )
+          for key in "${keys[@]}"; do
+            val=$(grep "^${key}=" .env.example | cut -d= -f2-)
+            if [ -z "$val" ]; then
+              echo "MISSING key in .env.example: $key"
+              fail=1
+            elif [[ "$val" != CHANGE_ME* ]]; then
+              echo "REAL VALUE in .env.example for $key (must be CHANGE_ME placeholder)"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] && echo ".env.example placeholders OK" || exit 1
+
+      - name: Install Docker Compose
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y docker-compose-plugin
+
+      - name: docker-compose.yml syntax valid
+        run: |
+          # Provide dummy env vars so Compose can interpolate; we only check syntax
+          env $(grep -v '^#' .env.example | sed 's/CHANGE_ME[^ ]*/placeholder/g' | xargs) \
+            docker compose config --quiet
+          echo "docker-compose.yml syntax OK"
 
   # ---------------------------------------------------------------------------
   # Python quality — ruff lint + ruff format check + mypy

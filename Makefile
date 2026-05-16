@@ -180,7 +180,11 @@ format: ## Auto-fix formatting (Python + TypeScript)
 ##@ Testing
 
 .PHONY: test
-test: test-py test-ts ## Run all tests
+test: test-phase-0 test-py test-ts ## Run all tests
+
+.PHONY: test-phase-0
+test-phase-0: ## Run Phase 0 automated integration tests (requires running stack)
+	@bash scripts/test-phase-0.sh
 
 .PHONY: test-py
 test-py: ## Run Python tests with pytest
