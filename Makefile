@@ -8,6 +8,10 @@ SHELL         := /bin/bash
 COMPOSE       := docker compose
 PROJECT_NAME  := wekala
 
+# Load .env so secrets are available in recipe shells (e.g. make health)
+-include .env
+export
+
 # Colour helpers
 BOLD  := \033[1m
 RESET := \033[0m
@@ -46,6 +50,14 @@ install-hooks: ## Install pre-commit hooks
 	@echo "  $(GREEN)✓$(RESET) pre-commit hooks installed"
 
 ##@ Stack lifecycle
+
+.PHONY: pull-images
+pull-images: ## Pull all service images sequentially (avoids CDN EOF on parallel pulls)
+	@$(COMPOSE) config --services | while read svc; do \
+	  echo "  $(CYAN)→$(RESET) $$svc"; \
+	  $(COMPOSE) pull $$svc; \
+	done
+	@echo "  $(GREEN)✓$(RESET) All images pulled — run 'make up'"
 
 .PHONY: up
 up: ## Start the full stack (detached)
@@ -107,7 +119,7 @@ health: ## Check health of all services
 	@echo ""
 	@echo "$(BOLD)Service health checks:$(RESET)"
 	@$(MAKE) -s _check SVC="Supabase DB"       URL="http://localhost:8000/rest/v1/"            KEY_HDR="apikey: $${SUPABASE_ANON_KEY}"
-	@$(MAKE) -s _check SVC="Supabase Studio"   URL="http://localhost:54323/api/profile"
+	@$(MAKE) -s _check SVC="Supabase Studio"   URL="http://localhost:54323/"
 	@$(MAKE) -s _check SVC="Dify Web"          URL="http://localhost:3000"
 	@$(MAKE) -s _check SVC="Langfuse"          URL="http://localhost:3001/api/public/health"
 	@$(MAKE) -s _check SVC="Ollama"            URL="http://localhost:11434/"
@@ -119,9 +131,9 @@ health: ## Check health of all services
 .PHONY: _check
 _check:
 	@if [ -n "$(KEY_HDR)" ]; then \
-	  STATUS=$$(curl -s -o /dev/null -w "%{http_code}" -H "$(KEY_HDR)" "$(URL)" 2>/dev/null); \
+	  STATUS=$$(curl -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" -H "$(KEY_HDR)" "$(URL)" 2>/dev/null); \
 	else \
-	  STATUS=$$(curl -s -o /dev/null -w "%{http_code}" "$(URL)" 2>/dev/null); \
+	  STATUS=$$(curl -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" "$(URL)" 2>/dev/null); \
 	fi; \
 	if [ "$$STATUS" -ge 200 ] && [ "$$STATUS" -lt 400 ]; then \
 	  printf "  $(GREEN)✓$(RESET) %-20s HTTP $$STATUS\n" "$(SVC)"; \

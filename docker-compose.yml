@@ -25,8 +25,13 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      JWT_EXP: ${JWT_EXPIRY}
     volumes:
       - supabase-db-data:/var/lib/postgresql/data
+      - ./infra/supabase/volumes/db/roles.sql:/docker-entrypoint-initdb.d/migrations/99-roles.sql:ro
+      - ./infra/supabase/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/migrations/99-jwt.sql:ro
+      - ./infra/supabase/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - ./infra/supabase/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/migrations/97-webhooks.sql:ro
     networks:
       - supabase_net
     healthcheck:
@@ -54,6 +59,7 @@ services:
       AUTH_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION}
       DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT}
+      HOSTNAME: "0.0.0.0"
     ports:
       - "54323:3000"
     networks:
@@ -63,7 +69,7 @@ services:
       supabase-meta:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/profile || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -77,17 +83,27 @@ services:
     image: kong/kong:3.9.1
     container_name: wekala-supabase-kong
     restart: unless-stopped
+    # Pre-process kong.yml template: Docker Compose expands ${VAR} at compose
+    # time into the entrypoint string; $$ becomes a literal $ (sed search).
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        sed
+        's|$${SUPABASE_ANON_KEY}|${SUPABASE_ANON_KEY}|g;
+        s|$${SUPABASE_SERVICE_KEY}|${SUPABASE_SERVICE_ROLE_KEY}|g'
+        /tmp/kong-template.yml > /tmp/kong-processed.yml &&
+        exec /entrypoint.sh kong docker-start
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DECLARATIVE_CONFIG: /tmp/kong-processed.yml
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_WORKER_PROCESSES: "2"
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     volumes:
-      - ./infra/supabase/kong.yml:/var/lib/kong/kong.yml:ro
+      - ./infra/supabase/kong.yml:/tmp/kong-template.yml:ro
     ports:
       - "8000:8000"
       - "8443:8443"
@@ -98,7 +114,7 @@ services:
       supabase-auth:
         condition: service_healthy
       supabase-rest:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "kong health"]
       interval: 30s
@@ -108,7 +124,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 1024m
 
   supabase-auth:
     image: supabase/gotrue:v2.186.0
@@ -145,7 +161,7 @@ services:
       supabase-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9999/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:9999/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -173,11 +189,7 @@ services:
       supabase-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      disable: true
     deploy:
       resources:
         limits:
@@ -199,6 +211,7 @@ services:
       API_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       FLY_ALLOC_ID: fly123
       FLY_APP_NAME: realtime
+      APP_NAME: realtime
       SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
       ERL_AFLAGS: -proto_dist inet_tcp
       ENABLE_TAILSCALE: "false"
@@ -245,9 +258,9 @@ services:
       supabase-db:
         condition: service_healthy
       supabase-rest:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5000/status || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:5000/status',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -271,7 +284,7 @@ services:
     networks:
       - supabase_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5001/health || exit 1"]
+      test: ["CMD", "imgproxy", "health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -287,7 +300,8 @@ services:
     restart: unless-stopped
     environment:
       PG_META_PORT: 8080
-      PG_META_HOST: supabase-db
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: 5432
       PG_META_DB_USER: supabase_admin
       PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
       PG_META_DB_NAME: postgres
@@ -297,7 +311,7 @@ services:
       supabase-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:8080/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -478,6 +492,7 @@ services:
       APP_API_URL: ""
       SENTRY_DSN: ""
       NEXT_TELEMETRY_DISABLED: "1"
+      HOSTNAME: "0.0.0.0"
     ports:
       - "3000:3000"
     networks:
@@ -487,7 +502,7 @@ services:
       dify-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000 || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -524,7 +539,7 @@ services:
               count: all
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/ || exit 1"]
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -590,7 +605,7 @@ services:
     networks:
       - wekala_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5678/healthz || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:5678/healthz',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -604,6 +619,32 @@ services:
   # LANGFUSE — LLM observability (traces, evals, costs)
   # UI on port 3001. Each workspace gets its own Langfuse project.
   # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # ClickHouse — required by Langfuse v3 for event/trace storage
+  # ---------------------------------------------------------------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: wekala-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - langfuse_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   langfuse-db:
     image: postgres:16-alpine
@@ -640,9 +681,26 @@ services:
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       PORT: 3000
-      HOSTNAME: 0.0.0.0
+      HOSTNAME: "0.0.0.0"
       LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
       TELEMETRY_ENABLED: "false"
+      SALT: ${LANGFUSE_SALT}
+      NODE_OPTIONS: "--max-old-space-size=896"
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: unused
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: unused
+      LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "false"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse-media
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: unused
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: unused
     ports:
       - "3001:3000"
     networks:
@@ -651,16 +709,18 @@ services:
     depends_on:
       langfuse-db:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/public/health || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/public/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     deploy:
       resources:
         limits:
-          memory: 768m
+          memory: 1024m
 
   # ===========================================================================
   # MAILHOG — Local SMTP server for development email testing
@@ -678,7 +738,7 @@ services:
       - wekala_net
       - supabase_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8025 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8025 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -710,6 +770,8 @@ volumes:
   n8n-data:
     driver: local
   langfuse-db-data:
+    driver: local
+  clickhouse-data:
     driver: local
 
 # =============================================================================

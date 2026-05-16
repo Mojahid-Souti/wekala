@@ -180,6 +180,8 @@ function generateSecrets(envContent) {
 	set("N8N_USER_MANAGEMENT_JWT_SECRET", hex(32));
 	set("LANGFUSE_SECRET_KEY", hex(32));
 	set("LANGFUSE_NEXTAUTH_SECRET", hex(32));
+	set("LANGFUSE_SALT", hex(32));
+	set("CLICKHOUSE_PASSWORD", hex(32));
 
 	// 4. Cross-reference aliases — copy from the now-resolved source keys
 	//    Works correctly whether the source was just generated or was pre-existing.
