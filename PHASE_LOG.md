@@ -4,7 +4,7 @@ Record of completed phases. Updated after each phase passes manual test and is t
 
 Format:
 
-```
+```markdown
 ## Phase N — <name>
 - Started: YYYY-MM-DD
 - Completed: YYYY-MM-DD
@@ -19,8 +19,8 @@ Format:
 ## Phase 0 — Foundation & Ground Rules
 
 - Started: 2026-05-16
-- Completed: pending manual test sign-off
-- Tag: pending
+- Completed: 2026-05-16
+- Tag: phase-0-complete
 - Notes:
   - Dev environment pre-existing (WSL2, Node 24.15, Python 3.13, mise, uv, pnpm, git).
   - Phase 0 scope: repo skeleton only — no app code.
