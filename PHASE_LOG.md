@@ -34,6 +34,7 @@ Format:
   - Next.js 15/16 binds only to the IP resolved from the `HOSTNAME` env var (Docker default = container short ID → specific bridge IP). Fixed with `HOSTNAME: "0.0.0.0"` on supabase-studio and dify-web.
   - Langfuse v3 requires ClickHouse (event storage) and SALT (API key encryption). ClickHouse service added; internal network only, no exposed ports.
   - All 8 services pass `make health` (HTTP 2xx/3xx).
+  - CI: `ubuntu-latest` runners ship Docker Compose v2 pre-installed; `docker-compose-plugin` apt package does not exist on runners — removed install step.
 - Outstanding:
   - Branch protection on `main` on GitHub must be configured manually after remote is created (see README).
   - Dependabot config not yet in place — no `apps/` with package manifests; add in Phase 1.
