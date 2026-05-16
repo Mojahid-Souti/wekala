@@ -112,14 +112,10 @@ jobs:
           done
           [ "$fail" -eq 0 ] && echo ".env.example placeholders OK" || exit 1
 
-      - name: Install Docker Compose
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y docker-compose-plugin
-
       - name: docker-compose.yml syntax valid
         run: |
-          # Provide dummy env vars so Compose can interpolate; we only check syntax
+          # ubuntu-latest runners ship Docker Compose v2 — no install needed.
+          # Provide dummy env vars so Compose can interpolate; we only check syntax.
           env $(grep -v '^#' .env.example | sed 's/CHANGE_ME[^ ]*/placeholder/g' | xargs) \
             docker compose config --quiet
           echo "docker-compose.yml syntax OK"
