@@ -16,7 +16,7 @@ services:
   # ===========================================================================
 
   supabase-db:
-    image: supabase/postgres:15.8.1.073
+    image: supabase/postgres:15.8.1.085
     container_name: wekala-supabase-db
     restart: unless-stopped
     environment:
@@ -41,7 +41,7 @@ services:
           memory: 512m
 
   supabase-studio:
-    image: supabase/studio:2024.07.26-sha-7f9ee5e
+    image: supabase/studio:2026.04.27-sha-5f60601
     container_name: wekala-supabase-studio
     restart: unless-stopped
     environment:
@@ -74,7 +74,7 @@ services:
           memory: 256m
 
   supabase-kong:
-    image: kong:2.8.1
+    image: kong/kong:3.9.1
     container_name: wekala-supabase-kong
     restart: unless-stopped
     environment:
@@ -111,7 +111,7 @@ services:
           memory: 256m
 
   supabase-auth:
-    image: supabase/gotrue:v2.158.2
+    image: supabase/gotrue:v2.186.0
     container_name: wekala-supabase-auth
     restart: unless-stopped
     environment:
@@ -156,7 +156,7 @@ services:
           memory: 256m
 
   supabase-rest:
-    image: postgrest/postgrest:v12.2.0
+    image: postgrest/postgrest:v14.8
     container_name: wekala-supabase-rest
     restart: unless-stopped
     environment:
@@ -184,7 +184,7 @@ services:
           memory: 256m
 
   supabase-realtime:
-    image: supabase/realtime:v2.33.44
+    image: supabase/realtime:v2.76.5
     container_name: wekala-supabase-realtime
     restart: unless-stopped
     environment:
@@ -220,7 +220,7 @@ services:
           memory: 256m
 
   supabase-storage:
-    image: supabase/storage-api:v1.10.1
+    image: supabase/storage-api:v1.48.26
     container_name: wekala-supabase-storage
     restart: unless-stopped
     environment:
@@ -258,7 +258,7 @@ services:
           memory: 256m
 
   supabase-imgproxy:
-    image: darthsim/imgproxy:v3.8.0
+    image: darthsim/imgproxy:v3.30.1
     container_name: wekala-supabase-imgproxy
     restart: unless-stopped
     environment:
@@ -282,7 +282,7 @@ services:
           memory: 128m
 
   supabase-meta:
-    image: supabase/postgres-meta:v0.84.2
+    image: supabase/postgres-meta:v0.96.3
     container_name: wekala-supabase-meta
     restart: unless-stopped
     environment:
@@ -337,7 +337,7 @@ services:
           memory: 256m
 
   dify-redis:
-    image: redis:7.2-alpine
+    image: redis:7.4-alpine
     container_name: wekala-dify-redis
     restart: unless-stopped
     command: redis-server --requirepass ${DIFY_REDIS_PASSWORD} --maxmemory 128mb --maxmemory-policy allkeys-lru
@@ -357,7 +357,7 @@ services:
           memory: 128m
 
   dify-sandbox:
-    image: langgenius/dify-sandbox:0.2.10
+    image: langgenius/dify-sandbox:0.2.15
     container_name: wekala-dify-sandbox
     restart: unless-stopped
     environment:
@@ -378,7 +378,7 @@ services:
           memory: 512m
 
   dify-api: &dify-api
-    image: langgenius/dify-api:0.9.3
+    image: langgenius/dify-api:1.14.1
     container_name: wekala-dify-api
     restart: unless-stopped
     environment:
@@ -470,7 +470,7 @@ services:
           memory: 1g
 
   dify-web:
-    image: langgenius/dify-web:0.9.3
+    image: langgenius/dify-web:1.14.1
     container_name: wekala-dify-web
     restart: unless-stopped
     environment:
@@ -503,7 +503,7 @@ services:
   # ===========================================================================
 
   ollama:
-    image: ollama/ollama:0.5.13
+    image: ollama/ollama:0.24.0
     container_name: wekala-ollama
     restart: unless-stopped
     environment:
@@ -536,7 +536,7 @@ services:
   # ===========================================================================
 
   meilisearch:
-    image: getmeili/meilisearch:v1.9.0
+    image: getmeili/meilisearch:v1.43.1
     container_name: wekala-meilisearch
     restart: unless-stopped
     environment:
@@ -567,7 +567,7 @@ services:
   # ===========================================================================
 
   n8n:
-    image: n8nio/n8n:1.61.0
+    image: n8nio/n8n:2.20.9
     container_name: wekala-n8n
     restart: unless-stopped
     environment:
@@ -630,7 +630,7 @@ services:
           memory: 256m
 
   langfuse:
-    image: langfuse/langfuse:2.70.0
+    image: langfuse/langfuse:3.174.1
     container_name: wekala-langfuse
     restart: unless-stopped
     environment:
