@@ -1,0 +1,198 @@
+# =============================================================================
+# WEKALA PLATFORM — Makefile
+# All commands run from the repo root inside WSL2.
+# =============================================================================
+
+.DEFAULT_GOAL := help
+SHELL         := /bin/bash
+COMPOSE       := docker compose
+PROJECT_NAME  := wekala
+
+# Colour helpers
+BOLD  := \033[1m
+RESET := \033[0m
+GREEN := \033[32m
+CYAN  := \033[36m
+
+##@ Help
+
+.PHONY: help
+help: ## Show this help
+	@awk 'BEGIN {FS = ":.*##"; printf "\n$(BOLD)Usage:$(RESET)  make $(CYAN)<target>$(RESET)\n"} \
+	  /^[a-zA-Z_0-9-]+:.*?##/ { printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2 } \
+	  /^##@/ { printf "\n$(BOLD)%s$(RESET)\n", substr($$0, 5) }' $(MAKEFILE_LIST)
+
+##@ Setup
+
+.PHONY: setup
+setup: ## First-time setup: copy .env.example → .env and generate secrets
+	@if [ ! -f .env ]; then \
+	  cp .env.example .env; \
+	  echo "  $(GREEN)✓$(RESET) Created .env from .env.example"; \
+	  echo "  $(CYAN)→$(RESET) Run 'make keygen' to fill in generated secrets, then 'make up'"; \
+	else \
+	  echo "  .env already exists — skipping copy"; \
+	fi
+
+.PHONY: keygen
+keygen: ## Generate random secrets and Supabase JWT keys into .env
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 required"; exit 1; }
+	@python3 scripts/keygen.py
+	@echo "  $(GREEN)✓$(RESET) Secrets written to .env"
+
+.PHONY: install-hooks
+install-hooks: ## Install pre-commit hooks
+	@command -v pre-commit >/dev/null 2>&1 || pip install pre-commit
+	pre-commit install --hook-type commit-msg --hook-type pre-commit
+	@echo "  $(GREEN)✓$(RESET) pre-commit hooks installed"
+
+##@ Stack lifecycle
+
+.PHONY: up
+up: ## Start the full stack (detached)
+	$(COMPOSE) up -d
+	@echo ""
+	@echo "  $(GREEN)Stack is up. Services:$(RESET)"
+	@echo "    Supabase Studio  → http://localhost:54323"
+	@echo "    Dify             → http://localhost:3000"
+	@echo "    Langfuse         → http://localhost:3001"
+	@echo "    Ollama           → http://localhost:11434"
+	@echo "    Meilisearch      → http://localhost:7700"
+	@echo "    n8n              → http://localhost:5678"
+	@echo "    MailHog          → http://localhost:8025"
+	@echo "    Supabase API     → http://localhost:8000"
+
+.PHONY: down
+down: ## Stop the stack (volumes preserved)
+	$(COMPOSE) down
+
+.PHONY: restart
+restart: ## Restart the full stack
+	$(COMPOSE) restart
+
+.PHONY: restart-svc
+restart-svc: ## Restart a single service: make restart-svc SVC=ollama
+	$(COMPOSE) restart $(SVC)
+
+.PHONY: logs
+logs: ## Tail logs for all services (Ctrl-C to exit)
+	$(COMPOSE) logs -f
+
+.PHONY: logs-svc
+logs-svc: ## Tail logs for one service: make logs-svc SVC=dify-api
+	$(COMPOSE) logs -f $(SVC)
+
+.PHONY: clean
+clean: ## Stop stack and DELETE all volumes (DESTRUCTIVE — ask first)
+	@echo "$(BOLD)WARNING: This will delete ALL persistent data volumes.$(RESET)"
+	@read -p "Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	$(COMPOSE) down -v
+	@echo "  $(GREEN)✓$(RESET) Volumes removed"
+
+##@ Models
+
+.PHONY: pull-models
+pull-models: ## Pull default Ollama models (LLM + embeddings + reranker)
+	@echo "  Pulling LLM: $${OLLAMA_DEFAULT_LLM:-qwen2.5:7b-instruct}"
+	docker exec wekala-ollama ollama pull $${OLLAMA_DEFAULT_LLM:-qwen2.5:7b-instruct}
+	@echo "  Pulling embeddings: $${OLLAMA_EMBEDDING_MODEL:-bge-m3}"
+	docker exec wekala-ollama ollama pull $${OLLAMA_EMBEDDING_MODEL:-bge-m3}
+	@echo "  Pulling reranker: $${OLLAMA_RERANKER_MODEL:-bge-reranker-v2-m3}"
+	docker exec wekala-ollama ollama pull $${OLLAMA_RERANKER_MODEL:-bge-reranker-v2-m3}
+	@echo "  $(GREEN)✓$(RESET) Models ready"
+
+##@ Health
+
+.PHONY: health
+health: ## Check health of all services
+	@echo ""
+	@echo "$(BOLD)Service health checks:$(RESET)"
+	@$(MAKE) -s _check SVC="Supabase DB"       URL="http://localhost:8000/rest/v1/"            KEY_HDR="apikey: $${SUPABASE_ANON_KEY}"
+	@$(MAKE) -s _check SVC="Supabase Studio"   URL="http://localhost:54323/api/profile"
+	@$(MAKE) -s _check SVC="Dify Web"          URL="http://localhost:3000"
+	@$(MAKE) -s _check SVC="Langfuse"          URL="http://localhost:3001/api/public/health"
+	@$(MAKE) -s _check SVC="Ollama"            URL="http://localhost:11434/"
+	@$(MAKE) -s _check SVC="Meilisearch"       URL="http://localhost:7700/health"
+	@$(MAKE) -s _check SVC="n8n"               URL="http://localhost:5678/healthz"
+	@$(MAKE) -s _check SVC="MailHog"           URL="http://localhost:8025"
+	@echo ""
+
+.PHONY: _check
+_check:
+	@if [ -n "$(KEY_HDR)" ]; then \
+	  STATUS=$$(curl -s -o /dev/null -w "%{http_code}" -H "$(KEY_HDR)" "$(URL)" 2>/dev/null); \
+	else \
+	  STATUS=$$(curl -s -o /dev/null -w "%{http_code}" "$(URL)" 2>/dev/null); \
+	fi; \
+	if [ "$$STATUS" -ge 200 ] && [ "$$STATUS" -lt 400 ]; then \
+	  printf "  $(GREEN)✓$(RESET) %-20s HTTP $$STATUS\n" "$(SVC)"; \
+	else \
+	  printf "  ✗ %-20s HTTP $$STATUS (expected 2xx/3xx)\n" "$(SVC)"; \
+	fi
+
+##@ Database
+
+.PHONY: migrate
+migrate: ## Run Alembic migrations (Phase 1+)
+	@echo "No migrations yet — add 'apps/api' in Phase 1."
+
+.PHONY: seed
+seed: ## Seed the database with dev data (Phase 1+)
+	@echo "No seed data yet — add seed scripts in Phase 1."
+
+##@ Code quality
+
+.PHONY: lint
+lint: lint-py lint-ts ## Run all linters
+
+.PHONY: lint-py
+lint-py: ## Lint and format Python with Ruff
+	@if [ -d apps/api ]; then \
+	  ruff check apps/api && ruff format --check apps/api; \
+	else \
+	  echo "  No Python app yet (Phase 1)"; \
+	fi
+
+.PHONY: lint-ts
+lint-ts: ## Lint and format TypeScript with Biome
+	@if [ -d apps/web ]; then \
+	  pnpm --filter web biome check .; \
+	else \
+	  echo "  No TS app yet (Phase 1)"; \
+	fi
+
+.PHONY: format
+format: ## Auto-fix formatting (Python + TypeScript)
+	@if [ -d apps/api ]; then ruff format apps/api; fi
+	@if [ -d apps/web ]; then pnpm --filter web biome format --write .; fi
+
+##@ Testing
+
+.PHONY: test
+test: test-py test-ts ## Run all tests
+
+.PHONY: test-py
+test-py: ## Run Python tests with pytest
+	@if [ -d apps/api ]; then \
+	  cd apps/api && python -m pytest tests/ -v; \
+	else \
+	  echo "  No Python tests yet (Phase 1)"; \
+	fi
+
+.PHONY: test-ts
+test-ts: ## Run TypeScript tests with Vitest
+	@if [ -d apps/web ]; then \
+	  pnpm --filter web vitest run; \
+	else \
+	  echo "  No TS tests yet (Phase 1)"; \
+	fi
+
+.PHONY: test-e2e
+test-e2e: ## Run end-to-end tests with Playwright (Phase 3+)
+	@echo "No e2e tests yet (Phase 3)."
+
+##@ Security
+
+.PHONY: secret-scan
+secret-scan: ## Run gitleaks secret scan on working tree
+	gitleaks detect --source . --verbose

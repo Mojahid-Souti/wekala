@@ -1,0 +1,735 @@
+# =============================================================================
+# WEKALA PLATFORM — Docker Compose
+# Phase 0: Foundation
+#
+# Services: Supabase · Dify · Ollama · Meilisearch · n8n · Langfuse · MailHog
+# Memory budgets per Rule 9 (CLAUDE.md §9):
+#   Supabase (all)  2 GB · Dify (all)  3 GB · Langfuse 1 GB
+#   Meilisearch  512 MB · n8n  512 MB · Ollama → VRAM only
+# =============================================================================
+
+services:
+
+  # ===========================================================================
+  # SUPABASE — Postgres + GoTrue + PostgREST + Realtime + Storage + Studio
+  # All traffic goes through Kong on port 8000; Studio on port 54323.
+  # ===========================================================================
+
+  supabase-db:
+    image: supabase/postgres:15.8.1.073
+    container_name: wekala-supabase-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${SUPABASE_JWT_SECRET}
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+    networks:
+      - supabase_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  supabase-studio:
+    image: supabase/studio:2024.07.26-sha-7f9ee5e
+    container_name: wekala-supabase-studio
+    restart: unless-stopped
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SUPABASE_URL: http://supabase-kong:8000
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION}
+      DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT}
+    ports:
+      - "54323:3000"
+    networks:
+      - supabase_net
+      - wekala_net
+    depends_on:
+      supabase-meta:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/profile || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  supabase-kong:
+    image: kong:2.8.1
+    container_name: wekala-supabase-kong
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    volumes:
+      - ./infra/supabase/kong.yml:/var/lib/kong/kong.yml:ro
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    networks:
+      - supabase_net
+      - wekala_net
+    depends_on:
+      supabase-auth:
+        condition: service_healthy
+      supabase-rest:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kong health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  supabase-auth:
+    image: supabase/gotrue:v2.158.2
+    container_name: wekala-supabase-auth
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: ${JWT_EXPIRY}
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_SMTP_HOST: ${SMTP_HOST}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT}
+      GOTRUE_SMTP_USER: ${SMTP_USER}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL}
+      GOTRUE_MAILER_URLPATHS_INVITE: "%(siteUrl)s/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: "%(siteUrl)s/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_RECOVERY: "%(siteUrl)s/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: "%(siteUrl)s/auth/v1/verify"
+    networks:
+      - supabase_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9999/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  supabase-rest:
+    image: postgrest/postgrest:v12.2.0
+    container_name: wekala-supabase-rest
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY}
+    networks:
+      - supabase_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  supabase-realtime:
+    image: supabase/realtime:v2.33.44
+    container_name: wekala-supabase-realtime
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DB_HOST: supabase-db
+      DB_PORT: 5432
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      FLY_ALLOC_ID: fly123
+      FLY_APP_NAME: realtime
+      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      ERL_AFLAGS: -proto_dist inet_tcp
+      ENABLE_TAILSCALE: "false"
+      DNS_NODES: "''"
+    networks:
+      - supabase_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  supabase-storage:
+    image: supabase/storage-api:v1.10.1
+    container_name: wekala-supabase-storage
+    restart: unless-stopped
+    environment:
+      ANON_KEY: ${SUPABASE_ANON_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://supabase-rest:3000
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: local
+      GLOBAL_S3_BUCKET: stub
+      ENABLE_IMAGE_TRANSFORMATION: "true"
+      IMGPROXY_URL: http://supabase-imgproxy:5001
+    volumes:
+      - supabase-storage-data:/var/lib/storage
+    networks:
+      - supabase_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+      supabase-rest:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5000/status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  supabase-imgproxy:
+    image: darthsim/imgproxy:v3.8.0
+    container_name: wekala-supabase-imgproxy
+    restart: unless-stopped
+    environment:
+      IMGPROXY_BIND: ":5001"
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
+      IMGPROXY_USE_ETAG: "true"
+      IMGPROXY_ENABLE_WEBP_DETECTION: "true"
+    volumes:
+      - supabase-storage-data:/var/lib/storage:ro
+    networks:
+      - supabase_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  supabase-meta:
+    image: supabase/postgres-meta:v0.84.2
+    container_name: wekala-supabase-meta
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: 8080
+      PG_META_HOST: supabase-db
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      PG_META_DB_NAME: postgres
+    networks:
+      - supabase_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  # ===========================================================================
+  # DIFY — Agent runtime (API + Worker + Web + Sandbox + DB + Redis)
+  # Web UI on port 3000. Internal API on 5001.
+  # ===========================================================================
+
+  dify-db:
+    image: postgres:16-alpine
+    container_name: wekala-dify-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dify
+      POSTGRES_USER: dify
+      POSTGRES_PASSWORD: ${DIFY_DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - dify-db-data:/var/lib/postgresql/data
+    networks:
+      - dify_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dify -d dify"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  dify-redis:
+    image: redis:7.2-alpine
+    container_name: wekala-dify-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${DIFY_REDIS_PASSWORD} --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - dify-redis-data:/data
+    networks:
+      - dify_net
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${DIFY_REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  dify-sandbox:
+    image: langgenius/dify-sandbox:0.2.10
+    container_name: wekala-dify-sandbox
+    restart: unless-stopped
+    environment:
+      API_KEY: ${DIFY_SANDBOX_API_KEY}
+      GIN_MODE: release
+      WORKER_TIMEOUT: 15
+    networks:
+      - dify_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8194/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  dify-api: &dify-api
+    image: langgenius/dify-api:0.9.3
+    container_name: wekala-dify-api
+    restart: unless-stopped
+    environment:
+      MODE: api
+      LOG_LEVEL: INFO
+      SECRET_KEY: ${DIFY_SECRET_KEY}
+      CONSOLE_WEB_URL: ""
+      INIT_PASSWORD: ""
+      CONSOLE_API_URL: ""
+      SERVICE_API_URL: ""
+      APP_WEB_URL: ""
+      CHECK_UPDATE_URL: ""
+      OPENAI_API_BASE: ""
+      DB_USERNAME: dify
+      DB_PASSWORD: ${DIFY_DB_PASSWORD}
+      DB_HOST: dify-db
+      DB_PORT: 5432
+      DB_DATABASE: dify
+      REDIS_HOST: dify-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${DIFY_REDIS_PASSWORD}
+      REDIS_DB: 0
+      CELERY_BROKER_URL: redis://:${DIFY_REDIS_PASSWORD}@dify-redis:6379/1
+      BROKER_USE_SSL: "false"
+      STORAGE_TYPE: ${DIFY_STORAGE_TYPE}
+      STORAGE_LOCAL_PATH: /app/api/storage
+      SANDBOX_HOST: dify-sandbox
+      SANDBOX_PORT: 8194
+      SANDBOX_API_KEY: ${DIFY_SANDBOX_API_KEY}
+      OLLAMA_API_BASE: ${OLLAMA_BASE_URL}
+      OLLAMA_API_KEY: ollama
+      MIGRATION_ENABLED: "true"
+    volumes:
+      - dify-storage-data:/app/api/storage
+    networks:
+      - dify_net
+      - wekala_net
+    depends_on:
+      dify-db:
+        condition: service_healthy
+      dify-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  dify-worker:
+    <<: *dify-api
+    container_name: wekala-dify-worker
+    environment:
+      MODE: worker
+      LOG_LEVEL: INFO
+      SECRET_KEY: ${DIFY_SECRET_KEY}
+      DB_USERNAME: dify
+      DB_PASSWORD: ${DIFY_DB_PASSWORD}
+      DB_HOST: dify-db
+      DB_PORT: 5432
+      DB_DATABASE: dify
+      REDIS_HOST: dify-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${DIFY_REDIS_PASSWORD}
+      REDIS_DB: 0
+      CELERY_BROKER_URL: redis://:${DIFY_REDIS_PASSWORD}@dify-redis:6379/1
+      BROKER_USE_SSL: "false"
+      STORAGE_TYPE: ${DIFY_STORAGE_TYPE}
+      STORAGE_LOCAL_PATH: /app/api/storage
+      SANDBOX_HOST: dify-sandbox
+      SANDBOX_PORT: 8194
+      SANDBOX_API_KEY: ${DIFY_SANDBOX_API_KEY}
+      OLLAMA_API_BASE: ${OLLAMA_BASE_URL}
+      OLLAMA_API_KEY: ollama
+      MIGRATION_ENABLED: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  dify-web:
+    image: langgenius/dify-web:0.9.3
+    container_name: wekala-dify-web
+    restart: unless-stopped
+    environment:
+      CONSOLE_API_URL: ""
+      APP_API_URL: ""
+      SENTRY_DSN: ""
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "3000:3000"
+    networks:
+      - dify_net
+      - wekala_net
+    depends_on:
+      dify-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ===========================================================================
+  # OLLAMA — Local LLM serving (GPU-accelerated via NVIDIA runtime)
+  # API on port 11434. Model weights live in ollama-data volume.
+  # ===========================================================================
+
+  ollama:
+    image: ollama/ollama:0.5.13
+    container_name: wekala-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_KEEP_ALIVE: 5m
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - wekala_net
+    # GPU passthrough — comment out if no NVIDIA GPU / NVIDIA Container Toolkit not installed
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # MEILISEARCH — Full-text search engine
+  # API on port 7700. English tokenizer default; multilingual added Phase 10.
+  # ===========================================================================
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.9.0
+    container_name: wekala-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: ${MEILI_ENV}
+      MEILI_DB_PATH: /meili_data
+      MEILI_LOG_LEVEL: WARN
+    volumes:
+      - meilisearch-data:/meili_data
+    ports:
+      - "7700:7700"
+    networks:
+      - wekala_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:7700/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ===========================================================================
+  # N8N — Workflow automation / connector hub (500+ integrations)
+  # UI on port 5678. Credentials encrypted at rest via N8N_ENCRYPTION_KEY.
+  # ===========================================================================
+
+  n8n:
+    image: n8nio/n8n:1.61.0
+    container_name: wekala-n8n
+    restart: unless-stopped
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_USER_MANAGEMENT_JWT_SECRET}
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Asia/Muscat
+      N8N_LOG_LEVEL: warn
+      EXECUTIONS_PROCESS: main
+    volumes:
+      - n8n-data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    networks:
+      - wekala_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ===========================================================================
+  # LANGFUSE — LLM observability (traces, evals, costs)
+  # UI on port 3001. Each workspace gets its own Langfuse project.
+  # ===========================================================================
+
+  langfuse-db:
+    image: postgres:16-alpine
+    container_name: wekala-langfuse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    networks:
+      - langfuse_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  langfuse:
+    image: langfuse/langfuse:2.70.0
+    container_name: wekala-langfuse
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-db:5432/langfuse
+      DIRECT_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-db:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "3001:3000"
+    networks:
+      - langfuse_net
+      - wekala_net
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/public/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  # ===========================================================================
+  # MAILHOG — Local SMTP server for development email testing
+  # SMTP on port 1025 · Web UI on port 8025
+  # ===========================================================================
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: wekala-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - wekala_net
+      - supabase_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8025 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+
+# =============================================================================
+# VOLUMES — All persistent data stored in named volumes
+# =============================================================================
+
+volumes:
+  supabase-db-data:
+    driver: local
+  supabase-storage-data:
+    driver: local
+  dify-db-data:
+    driver: local
+  dify-redis-data:
+    driver: local
+  dify-storage-data:
+    driver: local
+  ollama-data:
+    driver: local
+  meilisearch-data:
+    driver: local
+  n8n-data:
+    driver: local
+  langfuse-db-data:
+    driver: local
+
+# =============================================================================
+# NETWORKS
+# Internal networks isolate service groups; wekala_net is the shared fabric.
+# =============================================================================
+
+networks:
+  wekala_net:
+    driver: bridge
+    name: wekala_net
+  supabase_net:
+    driver: bridge
+    name: wekala_supabase_net
+    internal: false
+  dify_net:
+    driver: bridge
+    name: wekala_dify_net
+    internal: false
+  langfuse_net:
+    driver: bridge
+    name: wekala_langfuse_net
+    internal: false

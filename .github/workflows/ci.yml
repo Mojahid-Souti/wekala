@@ -1,0 +1,250 @@
+# =============================================================================
+# WEKALA PLATFORM — GitHub Actions CI
+#
+# Triggers: push to any branch + PR to main.
+# Jobs (all must pass to merge):
+#   secrets    → gitleaks secret scan
+#   quality-py → ruff + mypy  (Phase 1+ when apps/api exists)
+#   quality-ts → biome + tsc  (Phase 1+ when apps/web exists)
+#   test-py    → pytest       (Phase 1+)
+#   test-ts    → vitest       (Phase 1+)
+#   audit      → pip-audit + pnpm audit
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Secret scanning — runs first, blocks all other jobs if it finds a secret
+  # ---------------------------------------------------------------------------
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Python quality — ruff lint + ruff format check + mypy
+  # Skips gracefully when apps/api does not yet exist (Phase 0).
+  # ---------------------------------------------------------------------------
+  quality-py:
+    name: Python quality (ruff + mypy)
+    runs-on: ubuntu-latest
+    needs: secrets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if Python app exists
+        id: check-py
+        run: |
+          if [ -d "apps/api" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/api not found — skipping Python quality checks (Phase 0)"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.check-py.outputs.exists == 'true'
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        if: steps.check-py.outputs.exists == 'true'
+        run: pip install uv
+
+      - name: Install Python deps
+        if: steps.check-py.outputs.exists == 'true'
+        working-directory: apps/api
+        run: uv sync --dev
+
+      - name: Ruff lint
+        if: steps.check-py.outputs.exists == 'true'
+        working-directory: apps/api
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        if: steps.check-py.outputs.exists == 'true'
+        working-directory: apps/api
+        run: uv run ruff format --check .
+
+      - name: Mypy type check
+        if: steps.check-py.outputs.exists == 'true'
+        working-directory: apps/api
+        run: uv run mypy .
+
+  # ---------------------------------------------------------------------------
+  # TypeScript quality — biome lint + format + tsc type check
+  # Skips gracefully when apps/web does not yet exist (Phase 0).
+  # ---------------------------------------------------------------------------
+  quality-ts:
+    name: TypeScript quality (biome + tsc)
+    runs-on: ubuntu-latest
+    needs: secrets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if TS app exists
+        id: check-ts
+        run: |
+          if [ -d "apps/web" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/web not found — skipping TypeScript quality checks (Phase 0)"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check-ts.outputs.exists == 'true'
+        with:
+          node-version: "24"
+
+      - name: Enable corepack + pnpm
+        if: steps.check-ts.outputs.exists == 'true'
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install Node deps
+        if: steps.check-ts.outputs.exists == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Biome check
+        if: steps.check-ts.outputs.exists == 'true'
+        run: pnpm --filter web biome ci .
+
+      - name: TypeScript type check
+        if: steps.check-ts.outputs.exists == 'true'
+        run: pnpm --filter web tsc --noEmit
+
+  # ---------------------------------------------------------------------------
+  # Python tests — pytest
+  # ---------------------------------------------------------------------------
+  test-py:
+    name: Python tests (pytest)
+    runs-on: ubuntu-latest
+    needs: quality-py
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if Python app exists
+        id: check-py
+        run: |
+          if [ -d "apps/api" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/api not found — skipping pytest (Phase 0)"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.check-py.outputs.exists == 'true'
+        with:
+          python-version: "3.13"
+
+      - name: Install uv + deps
+        if: steps.check-py.outputs.exists == 'true'
+        working-directory: apps/api
+        run: pip install uv && uv sync --dev
+
+      - name: Run pytest
+        if: steps.check-py.outputs.exists == 'true'
+        working-directory: apps/api
+        run: uv run pytest tests/ -v --tb=short
+
+  # ---------------------------------------------------------------------------
+  # TypeScript tests — vitest
+  # ---------------------------------------------------------------------------
+  test-ts:
+    name: TypeScript tests (vitest)
+    runs-on: ubuntu-latest
+    needs: quality-ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if TS app exists
+        id: check-ts
+        run: |
+          if [ -d "apps/web" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/web not found — skipping vitest (Phase 0)"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check-ts.outputs.exists == 'true'
+        with:
+          node-version: "24"
+
+      - name: Enable corepack + pnpm
+        if: steps.check-ts.outputs.exists == 'true'
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install deps
+        if: steps.check-ts.outputs.exists == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Run vitest
+        if: steps.check-ts.outputs.exists == 'true'
+        run: pnpm --filter web vitest run
+
+  # ---------------------------------------------------------------------------
+  # Dependency audit — pip-audit (Python) + pnpm audit (Node)
+  # Reports known CVEs in dependencies.
+  # ---------------------------------------------------------------------------
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    needs: secrets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if Python app exists
+        id: check-py
+        run: |
+          [ -d "apps/api" ] && echo "exists=true" >> "$GITHUB_OUTPUT" || echo "exists=false" >> "$GITHUB_OUTPUT"
+
+      - name: Check if Node app exists
+        id: check-ts
+        run: |
+          [ -d "apps/web" ] && echo "exists=true" >> "$GITHUB_OUTPUT" || echo "exists=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        if: steps.check-py.outputs.exists == 'true'
+        with:
+          python-version: "3.13"
+
+      - name: pip-audit
+        if: steps.check-py.outputs.exists == 'true'
+        working-directory: apps/api
+        run: pip install uv pip-audit && pip-audit --requirement <(uv export --no-hashes)
+
+      - uses: actions/setup-node@v4
+        if: steps.check-ts.outputs.exists == 'true'
+        with:
+          node-version: "24"
+
+      - name: Enable corepack + pnpm
+        if: steps.check-ts.outputs.exists == 'true'
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: pnpm audit
+        if: steps.check-ts.outputs.exists == 'true'
+        run: pnpm install --frozen-lockfile && pnpm audit --audit-level moderate
