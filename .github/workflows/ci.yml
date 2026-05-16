@@ -114,10 +114,13 @@ jobs:
 
       - name: docker-compose.yml syntax valid
         run: |
-          # ubuntu-latest runners ship Docker Compose v2 — no install needed.
-          # Provide dummy env vars so Compose can interpolate; we only check syntax.
-          env $(grep -v '^#' .env.example | sed 's/CHANGE_ME[^ ]*/placeholder/g' | xargs) \
-            docker compose config --quiet
+          # Write a temporary .env with placeholder values — avoids xargs splitting
+          # on spaces in values like STUDIO_DEFAULT_ORGANIZATION=Wekala Dev.
+          grep -v '^#' .env.example \
+            | grep '=' \
+            | sed 's/=CHANGE_ME.*/=placeholder/' \
+            > /tmp/compose-check.env
+          docker compose --env-file /tmp/compose-check.env config --quiet
           echo "docker-compose.yml syntax OK"
 
   # ---------------------------------------------------------------------------
