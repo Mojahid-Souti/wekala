@@ -51,7 +51,7 @@ class MembershipRepository:
     ) -> Membership | None:
         m = await self.get(workspace_id, user_id)
         if m:
-            m.role = role  # type: ignore[assignment]
+            m.role = role
             await self._db.flush()
         return m
 

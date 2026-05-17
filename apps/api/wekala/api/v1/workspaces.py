@@ -65,7 +65,7 @@ class ApiKeyOut(BaseModel):
     id: uuid.UUID
     name: str
     key_prefix: str
-    scopes: list
+    scopes: list[str]
 
     @classmethod
     def from_model(cls, k: ApiKey) -> "ApiKeyOut":
@@ -108,7 +108,7 @@ async def list_workspaces(
 @router.get("/{workspace_id}", response_model=WorkspaceOut)
 async def get_workspace(
     workspace_id: uuid.UUID,
-    caller: Annotated[tuple, Depends(require_workspace_role(Role.VIEWER))],
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.VIEWER))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceOut:
     repo = WorkspaceRepository(db)
@@ -144,7 +144,7 @@ async def invite_member(
 @router.get("/{workspace_id}/members", response_model=list[MemberOut])
 async def list_members(
     workspace_id: uuid.UUID,
-    caller: Annotated[tuple, Depends(require_workspace_role(Role.VIEWER))],
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.VIEWER))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[MemberOut]:
     repo = MembershipRepository(db)
@@ -205,7 +205,7 @@ async def create_api_key(
 @router.get("/{workspace_id}/api-keys", response_model=list[ApiKeyOut])
 async def list_api_keys(
     workspace_id: uuid.UUID,
-    caller: Annotated[tuple, Depends(require_workspace_role(Role.ADMIN))],
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.ADMIN))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[ApiKeyOut]:
     from sqlalchemy import select

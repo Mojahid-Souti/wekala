@@ -83,4 +83,4 @@ class SupabaseAuthAdapter:
 
 
 # Ensure the adapter satisfies the protocol at import time
-_: AuthService = SupabaseAuthAdapter.__new__(SupabaseAuthAdapter)  # type: ignore[type-abstract]
+_: AuthService = SupabaseAuthAdapter.__new__(SupabaseAuthAdapter)

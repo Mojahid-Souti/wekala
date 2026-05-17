@@ -1,6 +1,7 @@
 """Auth endpoint unit tests — all external calls mocked via dependency_overrides."""
 
 import uuid
+from collections.abc import Generator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -25,7 +26,7 @@ _MOCK_SESSION = SessionResult(
 def _mock_auth_service(
     sign_up_result: UserResult | Exception | None = None,
     sign_in_result: SessionResult | Exception | None = None,
-):
+) -> AsyncMock:
     """Build an AsyncMock auth service for dependency override."""
     svc = AsyncMock()
     if isinstance(sign_up_result, Exception):
@@ -43,7 +44,7 @@ def _mock_auth_service(
 
 
 @pytest.fixture(autouse=True)
-def clear_overrides():
+def clear_overrides() -> Generator[None]:
     """Ensure dependency overrides are cleared after every test."""
     yield
     app.dependency_overrides.clear()
@@ -54,7 +55,7 @@ def clear_overrides():
 # ---------------------------------------------------------------------------
 
 
-def test_signup_success():
+def test_signup_success() -> None:
     app.dependency_overrides[get_auth_service] = lambda: _mock_auth_service()
     r = client.post(
         "/v1/auth/signup",
@@ -64,7 +65,7 @@ def test_signup_success():
     assert r.json()["email"] == _MOCK_USER.email
 
 
-def test_signup_password_too_short():
+def test_signup_password_too_short() -> None:
     r = client.post(
         "/v1/auth/signup",
         json={"email": "user@example.com", "password": "short"},
@@ -72,7 +73,7 @@ def test_signup_password_too_short():
     assert r.status_code == 422
 
 
-def test_signup_invalid_email():
+def test_signup_invalid_email() -> None:
     r = client.post(
         "/v1/auth/signup",
         json={"email": "not-an-email", "password": "securepassword123"},
@@ -80,7 +81,7 @@ def test_signup_invalid_email():
     assert r.status_code == 422
 
 
-def test_signup_upstream_failure_returns_400():
+def test_signup_upstream_failure_returns_400() -> None:
     app.dependency_overrides[get_auth_service] = lambda: _mock_auth_service(
         sign_up_result=RuntimeError("GoTrue error")
     )
@@ -96,7 +97,7 @@ def test_signup_upstream_failure_returns_400():
 # ---------------------------------------------------------------------------
 
 
-def test_login_success():
+def test_login_success() -> None:
     app.dependency_overrides[get_auth_service] = lambda: _mock_auth_service()
     r = client.post(
         "/v1/auth/login",
@@ -108,7 +109,7 @@ def test_login_success():
     assert data["user"]["email"] == _MOCK_USER.email
 
 
-def test_login_wrong_credentials():
+def test_login_wrong_credentials() -> None:
     app.dependency_overrides[get_auth_service] = lambda: _mock_auth_service(
         sign_in_result=RuntimeError("invalid credentials")
     )
@@ -124,7 +125,7 @@ def test_login_wrong_credentials():
 # ---------------------------------------------------------------------------
 
 
-def test_reset_password_always_succeeds():
+def test_reset_password_always_succeeds() -> None:
     app.dependency_overrides[get_auth_service] = lambda: _mock_auth_service()
     r = client.post("/v1/auth/reset-password", json={"email": "anyone@example.com"})
     assert r.status_code == 204
@@ -135,7 +136,7 @@ def test_reset_password_always_succeeds():
 # ---------------------------------------------------------------------------
 
 
-def test_me_unauthenticated():
+def test_me_unauthenticated() -> None:
     # HTTPBearer raises 401/403 when no Authorization header is present
     r = client.get("/v1/auth/me")
     assert r.status_code in (401, 403)

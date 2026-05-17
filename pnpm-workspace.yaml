@@ -1,8 +1,14 @@
 packages:
   - "apps/web"
 
+# Force postcss to >= 8.5.10 globally; next@15 ships 8.4.31 which has a CVE
+overrides:
+  postcss: ">=8.5.10"
+
 # Build scripts approved for these packages (required for binaries)
 allowBuilds:
   "@biomejs/biome": true
+  "@parcel/watcher": true
+  "@swc/core": true
   esbuild: true
   sharp: true

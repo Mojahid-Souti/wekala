@@ -1,6 +1,7 @@
 """Workspace endpoint unit tests — auth guard enforcement."""
 
 import uuid
+from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,27 +15,27 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def clear_overrides():
+def clear_overrides() -> Generator[None]:
     yield
     app.dependency_overrides.clear()
 
 
-def test_create_workspace_unauthenticated():
+def test_create_workspace_unauthenticated() -> None:
     r = client.post("/v1/workspaces", json={"name": "My Workspace"})
     assert r.status_code in (401, 403)
 
 
-def test_list_workspaces_unauthenticated():
+def test_list_workspaces_unauthenticated() -> None:
     r = client.get("/v1/workspaces")
     assert r.status_code in (401, 403)
 
 
-def test_get_workspace_unauthenticated():
+def test_get_workspace_unauthenticated() -> None:
     r = client.get(f"/v1/workspaces/{uuid.uuid4()}")
     assert r.status_code in (401, 403)
 
 
-def test_invite_member_unauthenticated():
+def test_invite_member_unauthenticated() -> None:
     r = client.post(
         f"/v1/workspaces/{uuid.uuid4()}/members",
         json={"user_id": str(uuid.uuid4()), "role": "hirer"},
@@ -42,7 +43,7 @@ def test_invite_member_unauthenticated():
     assert r.status_code in (401, 403)
 
 
-def test_create_api_key_unauthenticated():
+def test_create_api_key_unauthenticated() -> None:
     r = client.post(
         f"/v1/workspaces/{uuid.uuid4()}/api-keys",
         json={"name": "my key"},
@@ -50,7 +51,7 @@ def test_create_api_key_unauthenticated():
     assert r.status_code in (401, 403)
 
 
-def test_health():
+def test_health() -> None:
     r = client.get("/healthz")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}

@@ -7,9 +7,9 @@
     "pnpm": ">=9"
   },
   "scripts": {
-    "lint": "pnpm --filter web biome ci .",
-    "format": "pnpm --filter web biome format --write .",
-    "type-check": "pnpm --filter web tsc --noEmit",
-    "test": "pnpm --filter web vitest run"
+    "lint": "pnpm --filter wekala-web biome ci .",
+    "format": "pnpm --filter wekala-web biome format --write .",
+    "type-check": "pnpm --filter wekala-web tsc --noEmit",
+    "test": "pnpm --filter wekala-web test"
   }
 }

@@ -26,6 +26,7 @@ dev = [
     "mypy>=1.13",
     "ruff>=0.8",
     "sqlalchemy[mypy]>=2.0",
+    "types-python-jose>=3.3",
 ]
 
 [build-system]
