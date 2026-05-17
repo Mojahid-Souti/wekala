@@ -68,3 +68,28 @@ Format:
   - Logout endpoint currently no-ops at API layer (GoTrue session expires on JWT exp). Full revocation via GoTrue admin endpoint deferred to Phase 7 (session management feature).
   - `wekala-web` and `wekala-api` Docker images need `make up --build` on first run after Phase 1 changes.
 - ADRs added: —
+
+---
+
+## Phase 2 — Agent Lifecycle Core
+
+- Started: 2026-05-17
+- Completed: 2026-05-17
+- Tag: phase-2-complete
+- Notes:
+  - `AgentRuntime` Protocol + `DifyAdapter` (interface/adapter pattern per Rule 5). DifyAdapter calls Dify console API at `http://dify-api:5001/console/api/*`; `DIFY_CONSOLE_TOKEN` in backend env only, never exposed to frontend.
+  - `DifySLValidator`: `yaml.safe_load` only, 1 MiB size cap, required-field schema check, `__python__` node scan, tool allow-list enforcement.
+  - Three Alembic migrations (0005–0007): `agents`, `agent_versions`, `agent_imports`. Each has RLS (select policy scoped to workspace memberships; INSERT/UPDATE for builder+ role; service_role bypass).
+  - State machine: DRAFT → PUBLISHED, DRAFT → ARCHIVED, PUBLISHED → ARCHIVED. ARCHIVED is terminal. Rollback is non-destructive: creates new DRAFT version from any prior snapshot.
+  - Sandbox quota: 100 invocations/day per user. Checked via `count(audit_log WHERE action=agent.test AND actor=user AND date=today)` — O(log n) via index.
+  - All 13 REST endpoints fire-and-forget audit log entries (same pattern as WorkspaceService).
+  - OPA `min_role` extended with 6 new `agent.*` actions.
+  - Built-in `customer_support` template loaded from `apps/api/wekala/templates/` at startup; directory scan allows adding new templates without code changes.
+  - Frontend: agent list (filter tabs + paginated grid), new agent (YAML upload + template picker), agent detail (action buttons + sandbox test panel + version history + rollback). All strings via next-intl `agent.*` namespace.
+  - `.gitignore` had `lib/` (Python venv pattern) that over-broadly matched `apps/web/lib/`. Fixed with `!apps/web/lib/` negation rule.
+  - 21 new unit tests; 35 total across all test files — all pass. All linters (ruff, mypy strict, biome, tsc) clean. Zero pnpm audit vulnerabilities.
+- Outstanding:
+  - Sandbox test (scenario 10) requires Dify running with a registered app — skip if stack not up.
+  - `DIFY_CONSOLE_TOKEN` must be set in `.env` before `make up` for DifyAdapter to function (see `.env.example`).
+  - Frontend `token = ""` placeholder: real session token wiring deferred to a future auth-integration pass (Phase 3+).
+- ADRs added: —
