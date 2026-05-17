@@ -241,7 +241,7 @@ test-py: ## Run Python unit tests with pytest
 
 .PHONY: test-ts
 test-ts: ## Run TypeScript tests with Vitest
-	@pnpm --filter wekala-web vitest run --passWithNoTests
+	@pnpm --filter wekala-web run test
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests with Playwright (Phase 3+)

@@ -30,22 +30,22 @@ pass() { echo "  ${GREEN}✓${RESET} $1"; PASS=$((PASS+1)); }
 fail() { echo "  ${RED}✗${RESET} $1"; FAIL=$((FAIL+1)); }
 section() { echo ""; echo "${BOLD}$1${RESET}"; }
 
-# Helper: HTTP call returning status code
+# Helper: HTTP call returning status code (always exits 0; curl outputs "000" on conn refused)
 http() {
   local method="$1" url="$2"; shift 2
-  curl -s -o /dev/null -w "%{http_code}" -X "$method" "$url" "$@"
+  curl -s -o /dev/null -w "%{http_code}" -X "$method" "$url" "$@" 2>/dev/null || true
 }
 
-# Helper: HTTP call returning body
+# Helper: HTTP call returning body (always exits 0)
 http_body() {
   local method="$1" url="$2"; shift 2
-  curl -s -X "$method" "$url" "$@"
+  curl -s -X "$method" "$url" "$@" 2>/dev/null || true
 }
 
 # Random suffix to avoid email collisions across test runs
 SUFFIX=$(openssl rand -hex 4)
-EMAIL1="test-user-a-${SUFFIX}@wekala.test"
-EMAIL2="test-user-b-${SUFFIX}@wekala.test"
+EMAIL1="test-user-a-${SUFFIX}@wekala-dev.com"
+EMAIL2="test-user-b-${SUFFIX}@wekala-dev.com"
 PASSWORD="TestPassw0rd!Dev"   # 16 chars — satisfies min-12 policy
 
 # =============================================================================
@@ -190,11 +190,13 @@ fi
 # 11. Kong /api/v1/* route → wekala-api
 # =============================================================================
 section "11. Kong API routing"
-KONG_API=$(http GET "http://localhost:8000/api/v1/healthz")
-if [ "$KONG_API" -eq 200 ]; then
-  pass "GET http://localhost:8000/api/v1/healthz via Kong → 200"
+# /api/v1/auth/me: Kong strips /api → proxies /v1/auth/me to wekala-api.
+# wekala-api returns 401 (no token) which proves the route is correctly wired.
+KONG_API=$(http GET "http://localhost:8000/api/v1/auth/me")
+if [ "$KONG_API" -eq 401 ]; then
+  pass "GET /api/v1/auth/me via Kong → 401 (routed to wekala-api; auth enforced there)"
 else
-  fail "Kong /api/v1/* routing → $KONG_API (expected 200)"
+  fail "Kong /api/v1/* routing → $KONG_API (expected 401 from wekala-api)"
 fi
 
 # =============================================================================
@@ -206,7 +208,7 @@ RESET_KNOWN=$(http POST "${API}/v1/auth/reset-password" \
   -d "{\"email\":\"${EMAIL1}\"}")
 RESET_UNKNOWN=$(http POST "${API}/v1/auth/reset-password" \
   -H "Content-Type: application/json" \
-  -d '{"email":"nobody@wekala.test"}')
+  -d '{"email":"nobody@wekala-dev.com"}')
 if [ "$RESET_KNOWN" -eq 204 ] && [ "$RESET_UNKNOWN" -eq 204 ]; then
   pass "Password reset returns 204 for known and unknown emails (no enumeration)"
 else

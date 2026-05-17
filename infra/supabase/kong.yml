@@ -34,9 +34,11 @@ services:
     url: http://wekala-api:8001
     routes:
       - name: wekala-api-v1-all
-        strip_path: false
+        # strip_path: true removes the matched "/api" prefix before proxying,
+        # so /api/v1/auth/signup → /v1/auth/signup at wekala-api:8001.
+        strip_path: true
         paths:
-          - /api/v1
+          - /api
     plugins:
       - name: cors
 

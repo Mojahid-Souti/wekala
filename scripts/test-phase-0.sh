@@ -164,7 +164,7 @@ declare -A services=(
 
 for svc in "${!services[@]}"; do
   IFS='|' read -r url hdr <<< "${services[$svc]}"
-  status=$(http_status "$url" "${hdr-}")
+  status=$(http_status "$url" "${hdr-}") || status="000"
   if [ "$status" -ge 200 ] && [ "$status" -lt 400 ] 2>/dev/null; then
     ok "$svc → HTTP $status"
   else
@@ -177,7 +177,7 @@ done
 # ---------------------------------------------------------------------------
 header "7. Kong authentication enforcement"
 
-unauth_status=$(http_status "http://localhost:8000/rest/v1/")
+unauth_status=$(http_status "http://localhost:8000/rest/v1/") || unauth_status="000"
 if [ "$unauth_status" = "401" ]; then
   ok "Kong returns 401 for unauthenticated request to /rest/v1/"
 else

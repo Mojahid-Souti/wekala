@@ -100,7 +100,7 @@ services:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /tmp/kong-processed.yml
       KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,rate-limiting
+      KONG_PLUGINS: bundled
       KONG_NGINX_WORKER_PROCESSES: "2"
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
@@ -154,10 +154,10 @@ services:
       GOTRUE_SMTP_USER: ${SMTP_USER}
       GOTRUE_SMTP_PASS: ${SMTP_PASS}
       GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL}
-      GOTRUE_MAILER_URLPATHS_INVITE: "%(siteUrl)s/auth/v1/verify"
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: "%(siteUrl)s/auth/v1/verify"
-      GOTRUE_MAILER_URLPATHS_RECOVERY: "%(siteUrl)s/auth/v1/verify"
-      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: "%(siteUrl)s/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_INVITE: "/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: "/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_RECOVERY: "/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: "/auth/v1/verify"
     networks:
       - supabase_net
     depends_on:
@@ -770,6 +770,8 @@ services:
       WEKALA_SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       OPA_URL: http://opa:8181
+    ports:
+      - "8001:8001"
     networks:
       - wekala_net
       - supabase_net
@@ -830,16 +832,20 @@ services:
   # ===========================================================================
 
   opa:
-    image: openpolicyagent/opa:0.70.0-rootless
+    image: openpolicyagent/opa:0.70.0
     container_name: wekala-opa
     restart: unless-stopped
     command: ["run", "--server", "--addr", "0.0.0.0:8181", "/policies"]
     volumes:
       - ./infra/opa/policies:/policies:ro
+    ports:
+      - "8181:8181"
     networks:
       - wekala_net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8181/health || exit 1"]
+      # OPA image is distroless (no shell/wget/curl); use the opa binary itself.
+      # One-shot eval verifies the binary and policies parse cleanly.
+      test: ["CMD", "/opa", "eval", "-d", "/policies", "true"]
       interval: 10s
       timeout: 5s
       retries: 5
