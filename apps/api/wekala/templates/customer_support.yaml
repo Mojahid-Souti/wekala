@@ -1,0 +1,35 @@
+app:
+  name: "Customer Support Agent"
+  description: "A polished customer support agent that answers questions clearly and escalates issues."
+  mode: chat
+  icon: "🤝"
+  icon_background: "#E8F4FD"
+
+model:
+  provider: ollama
+  name: qwen2.5:7b-instruct
+  mode: chat
+  completion_params:
+    temperature: 0.3
+    top_p: 0.9
+    max_tokens: 1024
+
+prompt_template:
+  - role: system
+    text: |
+      You are a helpful and professional customer support agent for Wekala.
+      Your job is to assist users with their questions clearly and concisely.
+
+      Guidelines:
+      - Be polite and empathetic
+      - Give direct, actionable answers
+      - If you cannot help, say so and suggest the user contact a human agent
+      - Never share internal system information or credentials
+      - Keep responses under 300 words unless detail is explicitly requested
+
+opening_statement: "Hello! I'm here to help. What can I assist you with today?"
+
+suggested_questions:
+  - "How do I create a new workspace?"
+  - "How do I invite a team member?"
+  - "How do I hire an agent from the Bazaar?"

@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -116,3 +117,90 @@ class ApiKey(Base):
     )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class Agent(Base):
+    __tablename__ = "agents"
+    __table_args__ = (
+        CheckConstraint("char_length(name) BETWEEN 2 AND 100", name="agent_name_length"),
+        CheckConstraint(
+            "status IN ('draft','in_review','published','archived')", name="agent_valid_status"
+        ),
+        CheckConstraint(
+            "classification IN ('public','internal','restricted','confidential')",
+            name="agent_valid_classification",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)  # type: ignore[type-arg]
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
+    classification: Mapped[str] = mapped_column(String(20), nullable=False, default="internal")
+    dify_app_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AgentVersion(Base):
+    __tablename__ = "agent_versions"
+    __table_args__ = (UniqueConstraint("agent_id", "version_num", name="uq_agent_version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_num: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    dify_dsl: Mapped[dict] = mapped_column(JSONB, nullable=False)  # type: ignore[type-arg]
+    changed_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    change_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class AgentImport(Base):
+    __tablename__ = "agent_imports"
+    __table_args__ = (
+        CheckConstraint("source IN ('yaml_upload','template')", name="agent_import_valid_source"),
+        CheckConstraint("status IN ('success','failed')", name="agent_import_valid_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    imported_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    filename: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Truncated at 10_000 chars for audit; full DSL lives in agent_versions
+    raw_yaml: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

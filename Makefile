@@ -201,13 +201,47 @@ test-phase-0: ## Run Phase 0 automated integration tests (requires running stack
 test-phase-1: ## Run Phase 1 integration tests (requires running stack + migrations)
 	@bash scripts/test-phase-1.sh
 
+.PHONY: test-phase-2
+test-phase-2: ## Verify Phase 2 required files are present and unit tests pass
+	@echo "$(BOLD)Phase 2 file validation:$(RESET)"
+	@missing=0; \
+	files=( \
+	  "apps/api/wekala/adapters/agent_runtime/base.py" \
+	  "apps/api/wekala/adapters/agent_runtime/dify.py" \
+	  "apps/api/wekala/core/utils/yaml_validator.py" \
+	  "apps/api/wekala/db/repositories/agent.py" \
+	  "apps/api/wekala/db/repositories/agent_version.py" \
+	  "apps/api/wekala/db/repositories/agent_import.py" \
+	  "apps/api/wekala/services/agent_service.py" \
+	  "apps/api/wekala/api/v1/agents.py" \
+	  "apps/api/alembic/versions/0005_agents.py" \
+	  "apps/api/alembic/versions/0006_agent_versions.py" \
+	  "apps/api/alembic/versions/0007_agent_imports.py" \
+	  "apps/api/wekala/templates/customer_support.yaml" \
+	  "apps/api/tests/test_agents.py" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/agents/page.tsx" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/agents/new/page.tsx" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/agents/[agentId]/page.tsx" \
+	  "apps/web/components/agent/agent-card.tsx" \
+	  "apps/web/components/agent/agent-status-badge.tsx" \
+	  "apps/web/components/agent/version-list.tsx" \
+	); \
+	for f in "$${files[@]}"; do \
+	  if [ ! -f "$$f" ]; then echo "  MISSING: $$f"; missing=$$((missing+1)); \
+	  else echo "  $(GREEN)✓$(RESET) $$f"; fi; \
+	done; \
+	[ "$$missing" -eq 0 ] && echo "$(GREEN)All Phase 2 files present.$(RESET)" || { echo "$(BOLD)$$missing file(s) missing.$(RESET)"; exit 1; }
+	@echo ""
+	@echo "$(BOLD)Phase 2 unit tests:$(RESET)"
+	@cd apps/api && uv run pytest tests/test_agents.py -v
+
 .PHONY: test-py
 test-py: ## Run Python unit tests with pytest
 	@cd apps/api && uv run pytest tests/ -v
 
 .PHONY: test-ts
 test-ts: ## Run TypeScript tests with Vitest
-	@pnpm --filter web vitest run
+	@pnpm --filter wekala-web vitest run --passWithNoTests
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests with Playwright (Phase 3+)

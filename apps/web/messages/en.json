@@ -52,8 +52,58 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "agents": "Agents",
     "bazaar": "Bazaar",
     "settings": "Settings",
     "signOut": "Sign out"
+  },
+  "agent": {
+    "list": {
+      "title": "Agents",
+      "createButton": "New Agent",
+      "empty": "No agents yet. Import a YAML file or start from a template.",
+      "filterAll": "All",
+      "filterDraft": "Draft",
+      "filterPublished": "Published",
+      "filterArchived": "Archived"
+    },
+    "new": {
+      "title": "New Agent",
+      "tabUpload": "Upload YAML",
+      "tabTemplate": "From Template",
+      "uploadLabel": "Dify DSL file",
+      "uploadHint": "YAML file up to 1 MB",
+      "uploadButton": "Import",
+      "templatePickerTitle": "Choose a template",
+      "useTemplateButton": "Use template",
+      "cancelButton": "Cancel"
+    },
+    "detail": {
+      "statusBadge": "Status",
+      "version": "Version",
+      "classification": "Classification",
+      "owner": "Owner",
+      "editButton": "Edit",
+      "publishButton": "Publish",
+      "archiveButton": "Archive",
+      "cloneButton": "Clone",
+      "testButton": "Test",
+      "versionsTitle": "Version history",
+      "rollbackButton": "Rollback to this version",
+      "testPlaceholder": "Enter a test message...",
+      "testSendButton": "Send",
+      "testResponseLabel": "Response"
+    },
+    "status": {
+      "draft": "Draft",
+      "in_review": "In Review",
+      "published": "Published",
+      "archived": "Archived"
+    },
+    "errors": {
+      "importFailed": "Import failed. Check the YAML and try again.",
+      "testFailed": "Test failed. Make sure the agent is registered with Dify.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }

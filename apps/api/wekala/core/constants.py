@@ -26,7 +26,13 @@ class Action(StrEnum):
     MEMBERSHIP_UPDATE = "membership.update"
     API_KEY_MANAGE = "api_key.manage"
     AGENT_CREATE = "agent.create"
+    AGENT_VIEW = "agent.view"
+    AGENT_UPDATE = "agent.update"
     AGENT_PUBLISH = "agent.publish"
+    AGENT_ARCHIVE = "agent.archive"
+    AGENT_CLONE = "agent.clone"
+    AGENT_TEST = "agent.test"
+    AGENT_TRANSFER = "agent.transfer"
     AGENT_REVIEW = "agent.review"
     AGENT_HIRE = "agent.hire"
 
@@ -36,8 +42,28 @@ class ResourceType(StrEnum):
     MEMBERSHIP = "membership"
     API_KEY = "api_key"
     AGENT = "agent"
+    AGENT_VERSION = "agent_version"
 
 
 class Outcome(StrEnum):
     SUCCESS = "success"
     FAILURE = "failure"
+
+
+class AgentStatus(StrEnum):
+    DRAFT = "draft"
+    IN_REVIEW = "in_review"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
+class Classification(StrEnum):
+    PUBLIC = "public"
+    INTERNAL = "internal"
+    RESTRICTED = "restricted"
+    CONFIDENTIAL = "confidential"
+
+
+class AgentSource(StrEnum):
+    YAML_UPLOAD = "yaml_upload"
+    TEMPLATE = "template"

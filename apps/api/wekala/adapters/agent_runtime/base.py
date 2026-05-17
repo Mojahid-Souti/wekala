@@ -1,0 +1,29 @@
+"""AgentRuntime interface — production-ready Protocol (Rule 5).
+
+DifyAdapter implements this now. Future adapters (LangGraph, custom) swap in via config.
+"""
+
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class AgentRuntime(Protocol):
+    async def register_app(self, name: str, dsl: dict) -> str:  # type: ignore[type-arg]
+        """Register a new Dify app from DSL. Returns the Dify app_id (str)."""
+        ...
+
+    async def update_app(self, app_id: str, dsl: dict) -> None:  # type: ignore[type-arg]
+        """Push updated DSL to an existing Dify app."""
+        ...
+
+    async def invoke_sandbox(self, app_id: str, query: str, user_id: str) -> dict:  # type: ignore[type-arg]
+        """Run a non-streaming sandbox invocation. Returns {"answer": str, "usage": {...}}."""
+        ...
+
+    async def validate_dsl(self, dsl: dict) -> list[str]:  # type: ignore[type-arg]
+        """Validate DSL structure. Returns list of human-readable errors (empty = valid)."""
+        ...
+
+    async def delete_app(self, app_id: str) -> None:
+        """Delete a Dify app by its app_id."""
+        ...

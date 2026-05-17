@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     # OPA
     opa_url: str = "http://opa:8181"
 
+    # Dify agent runtime
+    dify_base_url: str = "http://dify-api:5001"
+    dify_console_token: str = ""  # required in production; empty disables Dify calls
+
+    # Agent sandbox quota (invocations per user per day)
+    agent_sandbox_daily_quota: int = 100
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.wekala_cors_origins.split(",")]

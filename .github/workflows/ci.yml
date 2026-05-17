@@ -80,6 +80,20 @@ jobs:
             "apps/web/next.config.ts"
             "infra/opa/policies/authz.rego"
             "pnpm-workspace.yaml"
+            # Phase 2 required files
+            "apps/api/wekala/adapters/agent_runtime/base.py"
+            "apps/api/wekala/adapters/agent_runtime/dify.py"
+            "apps/api/wekala/core/utils/yaml_validator.py"
+            "apps/api/wekala/db/repositories/agent.py"
+            "apps/api/wekala/db/repositories/agent_version.py"
+            "apps/api/wekala/db/repositories/agent_import.py"
+            "apps/api/wekala/services/agent_service.py"
+            "apps/api/wekala/api/v1/agents.py"
+            "apps/api/alembic/versions/0005_agents.py"
+            "apps/api/alembic/versions/0006_agent_versions.py"
+            "apps/api/alembic/versions/0007_agent_imports.py"
+            "apps/api/wekala/templates/customer_support.yaml"
+            "apps/api/tests/test_agents.py"
           )
           for f in "${files[@]}"; do
             if [ ! -f "$f" ]; then

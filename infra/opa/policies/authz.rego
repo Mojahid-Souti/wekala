@@ -11,7 +11,7 @@ role_rank := {
 }
 
 # Minimum role required for each action.
-# Source of truth for all Phase 1 authorization decisions.
+# Source of truth for all Phase 1+2 authorization decisions.
 min_role := {
   "workspace.view":    "viewer",
   "workspace.update":  "admin",
@@ -21,8 +21,16 @@ min_role := {
   "membership.remove": "admin",
   "api_key.view":      "admin",
   "api_key.manage":    "admin",
+  # Agent lifecycle (Phase 2)
   "agent.create":      "builder",
+  "agent.view":        "viewer",
+  "agent.update":      "builder",
   "agent.publish":     "builder",
+  "agent.archive":     "builder",
+  "agent.clone":       "builder",
+  "agent.test":        "builder",
+  "agent.transfer":    "admin",
+  # Bazaar / review / hire (Phase 3+)
   "agent.review":      "reviewer",
   "agent.hire":        "hirer",
 }
