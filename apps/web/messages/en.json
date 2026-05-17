@@ -1,0 +1,59 @@
+{
+  "auth": {
+    "login": {
+      "title": "Sign in to Wekala",
+      "emailLabel": "Email address",
+      "passwordLabel": "Password",
+      "submitButton": "Sign in",
+      "forgotPassword": "Forgot password?",
+      "noAccount": "Don't have an account?",
+      "signUpLink": "Sign up"
+    },
+    "signup": {
+      "title": "Create your account",
+      "emailLabel": "Email address",
+      "passwordLabel": "Password",
+      "passwordHint": "At least 12 characters",
+      "submitButton": "Create account",
+      "hasAccount": "Already have an account?",
+      "signInLink": "Sign in"
+    },
+    "verify": {
+      "title": "Check your email",
+      "message": "We've sent a verification link to your email address. Click it to activate your account.",
+      "resendButton": "Resend email"
+    },
+    "resetPassword": {
+      "title": "Reset your password",
+      "message": "Enter your email and we'll send a reset link.",
+      "emailLabel": "Email address",
+      "submitButton": "Send reset link",
+      "backToLogin": "Back to sign in"
+    },
+    "errors": {
+      "invalidCredentials": "Invalid email or password",
+      "signupFailed": "Signup failed. Check your email and try again.",
+      "generic": "Something went wrong. Please try again."
+    }
+  },
+  "workspace": {
+    "dashboard": {
+      "title": "Your Workspaces",
+      "empty": "No workspaces yet.",
+      "createButton": "Create workspace"
+    },
+    "create": {
+      "title": "Create a workspace",
+      "nameLabel": "Workspace name",
+      "namePlaceholder": "e.g. Customer Success",
+      "submitButton": "Create",
+      "cancelButton": "Cancel"
+    }
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "bazaar": "Bazaar",
+    "settings": "Settings",
+    "signOut": "Sign out"
+  }
+}

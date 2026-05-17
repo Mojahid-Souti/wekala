@@ -73,6 +73,13 @@ jobs:
             "infra/supabase/volumes/db/realtime.sql"
             "infra/supabase/volumes/db/webhooks.sql"
             "docs/adr/0000-template.md"
+            "apps/api/pyproject.toml"
+            "apps/api/wekala/main.py"
+            "apps/api/alembic.ini"
+            "apps/web/package.json"
+            "apps/web/next.config.ts"
+            "infra/opa/policies/authz.rego"
+            "pnpm-workspace.yaml"
           )
           for f in "${files[@]}"; do
             if [ ! -f "$f" ]; then
@@ -156,7 +163,7 @@ jobs:
       - name: Install Python deps
         if: steps.check-py.outputs.exists == 'true'
         working-directory: apps/api
-        run: uv sync --dev
+        run: uv sync
 
       - name: Ruff lint
         if: steps.check-py.outputs.exists == 'true'
@@ -243,7 +250,7 @@ jobs:
       - name: Install uv + deps
         if: steps.check-py.outputs.exists == 'true'
         working-directory: apps/api
-        run: pip install uv && uv sync --dev
+        run: pip install uv && uv sync
 
       - name: Run pytest
         if: steps.check-py.outputs.exists == 'true'

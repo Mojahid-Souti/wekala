@@ -40,3 +40,31 @@ Format:
   - Dependabot config not yet in place — no `apps/` with package manifests; add in Phase 1.
   - `LANGFUSE_PUBLIC_KEY` requires one manual step: log into Langfuse → create org + project → copy public API key into `.env`.
 - ADRs added: —
+
+---
+
+## Phase 1 — Authentication, Authorization, Multi-tenancy
+
+- Started: 2026-05-17
+- Completed: 2026-05-17
+- Tag: phase-1-complete
+- Notes:
+  - FastAPI backend (`apps/api`) built with interface+adapter pattern: `AuthService` Protocol → `SupabaseAuthAdapter` (calls GoTrue REST via httpx). Ready to swap for `OmantelSSOAdapter`/`KeycloakAdapter` with config change only.
+  - JWT verification is local (python-jose) — no network round-trip per request. O(1).
+  - OPA sidecar (`openpolicyagent/opa:0.70.0-rootless`) on internal wekala_net only. Permission check is O(1) map lookup in Rego; result cached per request.
+  - All 4 tenant tables (`workspaces`, `memberships`, `audit_log`, `api_keys`) have `ENABLE ROW LEVEL SECURITY` + `service_role` bypass policy. Alembic migrations 0001–0004.
+  - API key format: `wk_<40 hex chars>`. Argon2id hash stored; prefix (first 8 chars) shown in UI; plaintext returned once on creation only.
+  - `audit_log.metadata` column renamed to `event_metadata` at ORM layer — `metadata` is reserved by SQLAlchemy's DeclarativeBase. DB column still named `metadata` via explicit column name arg.
+  - Next.js 15 frontend (`apps/web`) with next-intl (all strings via translation keys, no hardcoded UI text). sessionStorage for JWT (no cookies → no CSRF surface).
+  - Rate-limit plugin added to Kong: signup 10 rpm / login (token) 5 rpm per IP. Required adding `rate-limiting` to `KONG_PLUGINS`.
+  - `GOTRUE_PASSWORD_MIN_LENGTH=12` added to GoTrue service (GoTrue enforces at auth layer; API schema also validates ≥12 chars).
+  - Unit tests use `app.dependency_overrides` (not `@patch`) because FastAPI `Depends` captures function references at decoration time.
+  - `pydantic[email]` (with `email-validator`) required for `EmailStr` fields.
+  - Python runtime in venv is 3.14.4 (uv chose latest patch of mise-pinned 3.x); all code compatible.
+  - pnpm workspace (`pnpm-workspace.yaml` + root `package.json`) created; `pnpm-lock.yaml` committed.
+- Outstanding:
+  - `make migrate` requires `supabase-db` container to be running (Alembic connects directly to Postgres).
+  - Dependabot config not yet added — intentionally deferred (adding in Phase 7 alongside SDK/API hardening).
+  - Logout endpoint currently no-ops at API layer (GoTrue session expires on JWT exp). Full revocation via GoTrue admin endpoint deferred to Phase 7 (session management feature).
+  - `wekala-web` and `wekala-api` Docker images need `make up --build` on first run after Phase 1 changes.
+- ADRs added: —

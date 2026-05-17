@@ -1,0 +1,8 @@
+packages:
+  - "apps/web"
+
+# Build scripts approved for these packages (required for binaries)
+allowBuilds:
+  "@biomejs/biome": true
+  esbuild: true
+  sharp: true

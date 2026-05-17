@@ -1,11 +1,13 @@
 # =============================================================================
 # WEKALA PLATFORM — Docker Compose
-# Phase 0: Foundation
+# Phase 1: Authentication, Authorization, Multi-tenancy
 #
 # Services: Supabase · Dify · Ollama · Meilisearch · n8n · Langfuse · MailHog
+#           wekala-api · wekala-web · opa
 # Memory budgets per Rule 9 (CLAUDE.md §9):
 #   Supabase (all)  2 GB · Dify (all)  3 GB · Langfuse 1 GB
 #   Meilisearch  512 MB · n8n  512 MB · Ollama → VRAM only
+#   wekala-api  512 MB · wekala-web  512 MB · opa  128 MB
 # =============================================================================
 
 services:
@@ -98,7 +100,7 @@ services:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /tmp/kong-processed.yml
       KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,rate-limiting
       KONG_NGINX_WORKER_PROCESSES: "2"
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
@@ -146,6 +148,7 @@ services:
       GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_PASSWORD_MIN_LENGTH: ${GOTRUE_PASSWORD_MIN_LENGTH:-12}
       GOTRUE_SMTP_HOST: ${SMTP_HOST}
       GOTRUE_SMTP_PORT: ${SMTP_PORT}
       GOTRUE_SMTP_USER: ${SMTP_USER}
@@ -747,6 +750,104 @@ services:
       resources:
         limits:
           memory: 64m
+
+  # ===========================================================================
+  # WEKALA API — FastAPI backend (Phase 1: auth, workspaces, RBAC)
+  # Internal only — exposed via Kong at /api/v1/*. No direct external port.
+  # ===========================================================================
+
+  wekala-api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: wekala-api
+    restart: unless-stopped
+    environment:
+      WEKALA_ENV: development
+      WEKALA_SECRET_KEY: ${WEKALA_SECRET_KEY}
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      WEKALA_SUPABASE_URL: http://supabase-kong:8000
+      WEKALA_SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      OPA_URL: http://opa:8181
+    networks:
+      - wekala_net
+      - supabase_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8001/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ===========================================================================
+  # WEKALA WEB — Next.js 15 frontend (Phase 1: login, signup, dashboard)
+  # UI on port 3002.
+  # ===========================================================================
+
+  wekala-web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: wekala-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      HOSTNAME: "0.0.0.0"
+      PORT: "3002"
+    ports:
+      - "3002:3002"
+    networks:
+      - wekala_net
+    depends_on:
+      wekala-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3002/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ===========================================================================
+  # OPA — Open Policy Agent sidecar (Phase 1: RBAC authorization)
+  # Internal only — wekala-api calls http://opa:8181. No external port.
+  # ===========================================================================
+
+  opa:
+    image: openpolicyagent/opa:0.70.0-rootless
+    container_name: wekala-opa
+    restart: unless-stopped
+    command: ["run", "--server", "--addr", "0.0.0.0:8181", "/policies"]
+    volumes:
+      - ./infra/opa/policies:/policies:ro
+    networks:
+      - wekala_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8181/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
 # =============================================================================
 # VOLUMES — All persistent data stored in named volumes

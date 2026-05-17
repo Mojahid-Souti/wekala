@@ -1,0 +1,15 @@
+{
+  "name": "wekala-platform",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "lint": "pnpm --filter web biome ci .",
+    "format": "pnpm --filter web biome format --write .",
+    "type-check": "pnpm --filter web tsc --noEmit",
+    "test": "pnpm --filter web vitest run"
+  }
+}

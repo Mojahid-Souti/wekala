@@ -64,14 +64,16 @@ up: ## Start the full stack (detached)
 	$(COMPOSE) up -d
 	@echo ""
 	@echo "  $(GREEN)Stack is up. Services:$(RESET)"
+	@echo "    Wekala Web       → http://localhost:3002"
+	@echo "    Wekala API       → http://localhost:8001 (via Kong: http://localhost:8000/api/v1)"
 	@echo "    Supabase Studio  → http://localhost:54323"
+	@echo "    Supabase API     → http://localhost:8000"
 	@echo "    Dify             → http://localhost:3000"
 	@echo "    Langfuse         → http://localhost:3001"
 	@echo "    Ollama           → http://localhost:11434"
 	@echo "    Meilisearch      → http://localhost:7700"
 	@echo "    n8n              → http://localhost:5678"
 	@echo "    MailHog          → http://localhost:8025"
-	@echo "    Supabase API     → http://localhost:8000"
 
 .PHONY: down
 down: ## Stop the stack (volumes preserved)
@@ -126,6 +128,9 @@ health: ## Check health of all services
 	@$(MAKE) -s _check SVC="Meilisearch"       URL="http://localhost:7700/health"
 	@$(MAKE) -s _check SVC="n8n"               URL="http://localhost:5678/healthz"
 	@$(MAKE) -s _check SVC="MailHog"           URL="http://localhost:8025"
+	@$(MAKE) -s _check SVC="Wekala API"        URL="http://localhost:8001/healthz"
+	@$(MAKE) -s _check SVC="Wekala Web"        URL="http://localhost:3002/"
+	@$(MAKE) -s _check SVC="OPA"               URL="http://localhost:8181/health"
 	@echo ""
 
 .PHONY: _check
@@ -144,12 +149,18 @@ _check:
 ##@ Database
 
 .PHONY: migrate
-migrate: ## Run Alembic migrations (Phase 1+)
-	@echo "No migrations yet — add 'apps/api' in Phase 1."
+migrate: ## Run Alembic migrations (requires running supabase-db)
+	@command -v uv >/dev/null 2>&1 || { echo "uv required — see mise config"; exit 1; }
+	@cd apps/api && uv run alembic upgrade head
+	@echo "  $(GREEN)✓$(RESET) Migrations applied"
+
+.PHONY: migrate-down
+migrate-down: ## Roll back last Alembic migration
+	@cd apps/api && uv run alembic downgrade -1
 
 .PHONY: seed
-seed: ## Seed the database with dev data (Phase 1+)
-	@echo "No seed data yet — add seed scripts in Phase 1."
+seed: ## Seed the database with dev data
+	@echo "  No seed data for Phase 1 — workspaces are created via the API"
 
 ##@ Code quality
 
@@ -180,27 +191,23 @@ format: ## Auto-fix formatting (Python + TypeScript)
 ##@ Testing
 
 .PHONY: test
-test: test-phase-0 test-py test-ts ## Run all tests
+test: test-phase-0 test-phase-1 test-py test-ts ## Run all tests
 
 .PHONY: test-phase-0
 test-phase-0: ## Run Phase 0 automated integration tests (requires running stack)
 	@bash scripts/test-phase-0.sh
 
+.PHONY: test-phase-1
+test-phase-1: ## Run Phase 1 integration tests (requires running stack + migrations)
+	@bash scripts/test-phase-1.sh
+
 .PHONY: test-py
-test-py: ## Run Python tests with pytest
-	@if [ -d apps/api ]; then \
-	  cd apps/api && python -m pytest tests/ -v; \
-	else \
-	  echo "  No Python tests yet (Phase 1)"; \
-	fi
+test-py: ## Run Python unit tests with pytest
+	@cd apps/api && uv run pytest tests/ -v
 
 .PHONY: test-ts
 test-ts: ## Run TypeScript tests with Vitest
-	@if [ -d apps/web ]; then \
-	  pnpm --filter web vitest run; \
-	else \
-	  echo "  No TS tests yet (Phase 1)"; \
-	fi
+	@pnpm --filter web vitest run
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests with Playwright (Phase 3+)
