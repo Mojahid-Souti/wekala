@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -204,3 +205,67 @@ class AgentImport(Base):
     status: Mapped[str] = mapped_column(String(10), nullable=False)
     error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Hire(Base):
+    __tablename__ = "hires"
+    __table_args__ = (UniqueConstraint("workspace_id", "agent_id", name="uq_hire"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    hired_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    hired_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+    __table_args__ = (
+        UniqueConstraint("agent_id", "author_id", name="uq_review"),
+        CheckConstraint("rating BETWEEN 1 AND 5", name="review_valid_rating"),
+        CheckConstraint("char_length(body) <= 2000", name="review_body_max"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (
+        CheckConstraint("char_length(name) BETWEEN 2 AND 50", name="category_name_length"),
+        CheckConstraint("slug ~ '^[a-z0-9-]+$'", name="category_slug_format"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(60), nullable=False, unique=True)
+
+
+class AgentCategory(Base):
+    __tablename__ = "agent_categories"
+    __table_args__ = (UniqueConstraint("agent_id", "category_id", name="uq_agent_category"),)
+
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True
+    )
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True
+    )

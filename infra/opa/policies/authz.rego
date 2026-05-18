@@ -30,9 +30,14 @@ min_role := {
   "agent.clone":       "builder",
   "agent.test":        "builder",
   "agent.transfer":    "admin",
-  # Bazaar / review / hire (Phase 3+)
+  # Bazaar / review / hire (Phase 3)
   "agent.review":      "reviewer",
   "agent.hire":        "hirer",
+  "bazaar.search":     "viewer",
+  "hire.create":       "hirer",
+  "hire.view":         "viewer",
+  "review.create":     "hirer",
+  "review.view":       "viewer",
 }
 
 # default deny

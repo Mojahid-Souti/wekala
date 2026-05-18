@@ -10,6 +10,8 @@ _format_version: "2.1"
 # Phase 1 additions:
 #   - /api/v1/* → wekala-api (JWT auth handled by the API itself)
 #   - rate-limiting on /auth/v1/signup (10 rpm) and /auth/v1/token (5 rpm)
+# Phase 3 additions:
+#   - rate-limiting on /api/v1/bazaar/agents (30 rpm search)
 ###############################################################################
 
 consumers:

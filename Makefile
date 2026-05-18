@@ -191,7 +191,7 @@ format: ## Auto-fix formatting (Python + TypeScript)
 ##@ Testing
 
 .PHONY: test
-test: test-phase-0 test-phase-1 test-py test-ts ## Run all tests
+test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-py test-ts ## Run all tests
 
 .PHONY: test-phase-0
 test-phase-0: ## Run Phase 0 automated integration tests (requires running stack)
@@ -234,6 +234,42 @@ test-phase-2: ## Verify Phase 2 required files are present and unit tests pass
 	@echo ""
 	@echo "$(BOLD)Phase 2 unit tests:$(RESET)"
 	@cd apps/api && uv run pytest tests/test_agents.py -v
+
+.PHONY: test-phase-3
+test-phase-3: ## Verify Phase 3 required files are present and unit tests pass
+	@echo "$(BOLD)Phase 3 file validation:$(RESET)"
+	@missing=0; \
+	files=( \
+	  "apps/api/wekala/db/repositories/hire.py" \
+	  "apps/api/wekala/db/repositories/review.py" \
+	  "apps/api/wekala/db/repositories/category.py" \
+	  "apps/api/wekala/db/repositories/bazaar.py" \
+	  "apps/api/wekala/adapters/search/base.py" \
+	  "apps/api/wekala/adapters/search/meilisearch.py" \
+	  "apps/api/wekala/services/bazaar_service.py" \
+	  "apps/api/wekala/api/v1/bazaar.py" \
+	  "apps/api/alembic/versions/0008_hires.py" \
+	  "apps/api/alembic/versions/0009_reviews.py" \
+	  "apps/api/alembic/versions/0010_categories.py" \
+	  "apps/api/tests/test_bazaar.py" \
+	  "apps/web/app/(app)/bazaar/page.tsx" \
+	  "apps/web/app/(app)/bazaar/[agentId]/page.tsx" \
+	  "apps/web/app/(app)/bazaar/hired/page.tsx" \
+	  "apps/web/components/bazaar/bazaar-agent-card.tsx" \
+	  "apps/web/components/bazaar/hire-button.tsx" \
+	  "apps/web/components/bazaar/rating-stars.tsx" \
+	  "apps/web/components/bazaar/review-form.tsx" \
+	  "apps/web/components/bazaar/search-bar.tsx" \
+	  "apps/web/components/bazaar/category-filter.tsx" \
+	); \
+	for f in "$${files[@]}"; do \
+	  if [ ! -f "$$f" ]; then echo "  MISSING: $$f"; missing=$$((missing+1)); \
+	  else echo "  $(GREEN)✓$(RESET) $$f"; fi; \
+	done; \
+	[ "$$missing" -eq 0 ] && echo "$(GREEN)All Phase 3 files present.$(RESET)" || { echo "$(BOLD)$$missing file(s) missing.$(RESET)"; exit 1; }
+	@echo ""
+	@echo "$(BOLD)Phase 3 unit tests:$(RESET)"
+	@cd apps/api && uv run pytest tests/test_bazaar.py -v
 
 .PHONY: test-py
 test-py: ## Run Python unit tests with pytest

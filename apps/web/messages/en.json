@@ -105,5 +105,43 @@
       "testFailed": "Test failed. Make sure the agent is registered with Dify.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "bazaar": {
+    "catalog": {
+      "title": "Bazaar",
+      "searchPlaceholder": "Search agents…",
+      "filterAll": "All",
+      "filterCategories": "Filter by category",
+      "empty": "No published agents found. Try a different search.",
+      "results": "{count} agents found"
+    },
+    "agent": {
+      "hireButton": "Hire",
+      "hiredButton": "Hired",
+      "unhireButton": "Unhire",
+      "ratingCount": "{count} reviews",
+      "noRatings": "No ratings yet",
+      "classification": "Classification",
+      "version": "Version"
+    },
+    "review": {
+      "title": "Reviews",
+      "ratingLabel": "Your rating",
+      "bodyLabel": "Review (optional)",
+      "bodyPlaceholder": "Tell others about your experience with this agent…",
+      "submitButton": "Submit review",
+      "updateButton": "Update review",
+      "empty": "No reviews yet. Be the first to review this agent.",
+      "loadMore": "Load more"
+    },
+    "hired": {
+      "title": "My Hired Agents",
+      "empty": "You haven't hired any agents yet. Browse the Bazaar to get started."
+    },
+    "errors": {
+      "hireFailed": "Hire failed. Please try again.",
+      "reviewFailed": "Review submission failed. Please try again.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }

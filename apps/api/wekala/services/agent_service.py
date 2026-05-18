@@ -13,12 +13,16 @@ All state-changing methods write an audit log entry as fire-and-forget.
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.agent_runtime.base import AgentRuntime
 from wekala.core.config import settings
+
+if TYPE_CHECKING:
+    from wekala.services.bazaar_service import BazaarService
 from wekala.core.constants import (
     Action,
     AgentSource,
@@ -250,8 +254,19 @@ class AgentService:
     # State transitions
     # ------------------------------------------------------------------
 
-    async def publish(self, *, agent: Agent, actor_id: uuid.UUID) -> Agent:
-        """DRAFT / IN_REVIEW → PUBLISHED. O(1)."""
+    async def publish(
+        self,
+        *,
+        agent: Agent,
+        actor_id: uuid.UUID,
+        bazaar_svc: BazaarService | None = None,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> Agent:
+        """DRAFT / IN_REVIEW → PUBLISHED. O(1).
+
+        If bazaar_svc + background_tasks are provided, indexes the agent
+        into Meilisearch as a fire-and-forget background task.
+        """
         self._assert_transition(agent, AgentStatus.PUBLISHED)
 
         async with self._db.begin_nested():
@@ -265,10 +280,24 @@ class AgentService:
                 resource_id=agent.id,
             )
 
+        if bazaar_svc and background_tasks:
+            background_tasks.add_task(bazaar_svc.index_agent, agent)
+
         return agent
 
-    async def archive(self, *, agent: Agent, actor_id: uuid.UUID) -> Agent:
-        """DRAFT / PUBLISHED → ARCHIVED. O(1)."""
+    async def archive(
+        self,
+        *,
+        agent: Agent,
+        actor_id: uuid.UUID,
+        bazaar_svc: BazaarService | None = None,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> Agent:
+        """DRAFT / PUBLISHED → ARCHIVED. O(1).
+
+        If bazaar_svc + background_tasks are provided, removes the agent
+        from the Meilisearch index as a fire-and-forget background task.
+        """
         self._assert_transition(agent, AgentStatus.ARCHIVED)
 
         async with self._db.begin_nested():
@@ -281,6 +310,9 @@ class AgentService:
                 resource_type=ResourceType.AGENT,
                 resource_id=agent.id,
             )
+
+        if bazaar_svc and background_tasks:
+            background_tasks.add_task(bazaar_svc.deindex_agent, agent.id)
 
         return agent
 

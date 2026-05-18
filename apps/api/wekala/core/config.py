@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # Agent sandbox quota (invocations per user per day)
     agent_sandbox_daily_quota: int = 100
 
+    # Meilisearch
+    meilisearch_url: str = "http://wekala-meilisearch:7700"
+    meilisearch_master_key: str = ""  # MEILI_MASTER_KEY from env
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.wekala_cors_origins.split(",")]

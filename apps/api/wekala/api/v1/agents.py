@@ -13,6 +13,7 @@ from typing import Annotated
 import yaml
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     HTTPException,
@@ -25,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from wekala.adapters.agent_runtime.dify import DifyAdapter
 from wekala.adapters.auth.base import UserResult
 from wekala.api.deps import get_current_user, require_workspace_role
+from wekala.core.config import settings
 from wekala.core.constants import Role
 from wekala.db.models import Agent, AgentVersion
 from wekala.db.repositories.agent import AgentRepository
@@ -304,11 +306,24 @@ async def publish_agent(
     caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
     db: Annotated[AsyncSession, Depends(get_db)],
     agent: Annotated[Agent, Depends(_get_agent)],
+    background_tasks: BackgroundTasks,
 ) -> AgentOut:
-    """Transition agent DRAFT → PUBLISHED. O(1)."""
+    """Transition agent DRAFT → PUBLISHED. Indexes into Meilisearch as background task. O(1)."""
+    from wekala.adapters.search.meilisearch import MeilisearchAdapter
+    from wekala.services.bazaar_service import BazaarService
+
     user, _ = caller
     svc = AgentService(db, _runtime())
-    agent = await svc.publish(agent=agent, actor_id=user.id)
+    search = MeilisearchAdapter(
+        url=settings.meilisearch_url, master_key=settings.meilisearch_master_key
+    )
+    bazaar_svc = BazaarService(db, search)
+    agent = await svc.publish(
+        agent=agent,
+        actor_id=user.id,
+        bazaar_svc=bazaar_svc,
+        background_tasks=background_tasks,
+    )
     return AgentOut.from_orm(agent)
 
 
@@ -322,11 +337,24 @@ async def archive_agent(
     caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
     db: Annotated[AsyncSession, Depends(get_db)],
     agent: Annotated[Agent, Depends(_get_agent)],
+    background_tasks: BackgroundTasks,
 ) -> AgentOut:
-    """Transition agent → ARCHIVED. O(1)."""
+    """Transition agent → ARCHIVED. Removes from Meilisearch as background task. O(1)."""
+    from wekala.adapters.search.meilisearch import MeilisearchAdapter
+    from wekala.services.bazaar_service import BazaarService
+
     user, _ = caller
     svc = AgentService(db, _runtime())
-    agent = await svc.archive(agent=agent, actor_id=user.id)
+    search = MeilisearchAdapter(
+        url=settings.meilisearch_url, master_key=settings.meilisearch_master_key
+    )
+    bazaar_svc = BazaarService(db, search)
+    agent = await svc.archive(
+        agent=agent,
+        actor_id=user.id,
+        bazaar_svc=bazaar_svc,
+        background_tasks=background_tasks,
+    )
     return AgentOut.from_orm(agent)
 
 

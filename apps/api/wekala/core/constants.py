@@ -35,6 +35,12 @@ class Action(StrEnum):
     AGENT_TRANSFER = "agent.transfer"
     AGENT_REVIEW = "agent.review"
     AGENT_HIRE = "agent.hire"
+    # Bazaar / hire / review (Phase 3)
+    HIRE_CREATE = "hire.create"
+    HIRE_VIEW = "hire.view"
+    REVIEW_CREATE = "review.create"
+    REVIEW_VIEW = "review.view"
+    BAZAAR_SEARCH = "bazaar.search"
 
 
 class ResourceType(StrEnum):
@@ -43,6 +49,9 @@ class ResourceType(StrEnum):
     API_KEY = "api_key"
     AGENT = "agent"
     AGENT_VERSION = "agent_version"
+    HIRE = "hire"
+    REVIEW = "review"
+    CATEGORY = "category"
 
 
 class Outcome(StrEnum):

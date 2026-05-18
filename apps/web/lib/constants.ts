@@ -10,6 +10,9 @@ export const ROUTES = {
   newAgent: (workspaceId: string) => `/workspaces/${workspaceId}/agents/new`,
   agentDetail: (workspaceId: string, agentId: string) =>
     `/workspaces/${workspaceId}/agents/${agentId}`,
+  bazaar: "/bazaar",
+  bazaarAgent: (agentId: string) => `/bazaar/${agentId}`,
+  hired: "/bazaar/hired",
 } as const;
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";

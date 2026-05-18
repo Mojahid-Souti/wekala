@@ -51,6 +51,45 @@ export type TemplateOut = {
   description: string;
 };
 
+export type BazaarAgentOut = {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  status: string;
+  language: string;
+  classification: string;
+  owner_id: string;
+  workspace_id: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  hired: boolean;
+  rating?: { avg: number | null; count: number };
+  category_ids?: string[];
+};
+
+export type CategoryOut = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+export type ReviewOut = {
+  id: string;
+  author_id: string;
+  rating: number;
+  body: string;
+  created_at: string;
+};
+
+export type HireOut = {
+  id: string;
+  workspace_id: string;
+  agent_id: string;
+  hired_at: string;
+};
+
 export const api = {
   auth: {
     signup: (email: string, password: string) =>
@@ -135,5 +174,64 @@ export const api = {
   },
   templates: {
     list: (token: string) => request<TemplateOut[]>("/v1/templates", {}, token),
+  },
+  bazaar: {
+    list: (
+      workspaceId: string,
+      token: string,
+      opts: { q?: string; cat?: string[]; page?: number; size?: number } = {}
+    ) => {
+      const params = new URLSearchParams({ workspace_id: workspaceId });
+      if (opts.q) params.set("q", opts.q);
+      if (opts.cat?.length) for (const c of opts.cat) params.append("cat", c);
+      if (opts.page) params.set("page", String(opts.page));
+      if (opts.size) params.set("size", String(opts.size));
+      return request<{ items: BazaarAgentOut[]; total: number; page: number; size: number }>(
+        `/v1/bazaar/agents?${params}`,
+        {},
+        token
+      );
+    },
+    get: (agentId: string, workspaceId: string, token: string) =>
+      request<BazaarAgentOut>(
+        `/v1/bazaar/agents/${agentId}?workspace_id=${workspaceId}`,
+        {},
+        token
+      ),
+    categories: (token: string) => request<CategoryOut[]>("/v1/bazaar/categories", {}, token),
+    reviews: (agentId: string, token: string, page = 1) =>
+      request<{ items: ReviewOut[]; total: number; page: number; size: number }>(
+        `/v1/bazaar/agents/${agentId}/reviews?page=${page}`,
+        {},
+        token
+      ),
+    submitReview: (
+      agentId: string,
+      workspaceId: string,
+      rating: number,
+      body: string,
+      token: string
+    ) =>
+      request<ReviewOut>(
+        `/v1/bazaar/agents/${agentId}/reviews?workspace_id=${workspaceId}`,
+        { method: "POST", body: JSON.stringify({ rating, body }) },
+        token
+      ),
+  },
+  hires: {
+    list: (workspaceId: string, token: string, page = 1) =>
+      request<{ items: BazaarAgentOut[]; total: number; page: number; size: number }>(
+        `/v1/workspaces/${workspaceId}/hires?page=${page}`,
+        {},
+        token
+      ),
+    hire: (workspaceId: string, agentId: string, token: string) =>
+      request<HireOut>(
+        `/v1/workspaces/${workspaceId}/hires?agent_id=${agentId}`,
+        { method: "POST" },
+        token
+      ),
+    unhire: (workspaceId: string, agentId: string, token: string) =>
+      request<void>(`/v1/workspaces/${workspaceId}/hires/${agentId}`, { method: "DELETE" }, token),
   },
 };
