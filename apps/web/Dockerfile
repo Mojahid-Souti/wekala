@@ -30,10 +30,12 @@ ENV PORT=3002
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
+# standalone/ mirrors the monorepo tree: server.js lives at apps/web/server.js
+# static files must sit at apps/web/.next/static relative to WORKDIR
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
 USER nextjs
 EXPOSE 3002
 
-CMD ["node", "server.js"]
+CMD ["node", "apps/web/server.js"]
