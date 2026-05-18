@@ -93,3 +93,28 @@ Format:
   - `DIFY_CONSOLE_TOKEN` must be set in `.env` before `make up` for DifyAdapter to function (see `.env.example`).
   - Frontend `token = ""` placeholder: real session token wiring deferred to a future auth-integration pass (Phase 3+).
 - ADRs added: —
+
+---
+
+## Phase 3 — Bazaar (Marketplace UI)
+
+- Started: 2026-05-18
+- Completed: 2026-05-18
+- Tag: phase-3-complete
+- Notes:
+  - `SearchAdapter` Protocol + `MeilisearchAdapter` (interface/adapter per Rule 5). Meilisearch Python SDK is synchronous; all calls wrapped in `asyncio.run_in_executor` via `functools.partial` — never blocks the event loop.
+  - Three Alembic migrations (0008–0010): `hires`, `reviews`, `categories` + `agent_categories`. All have `ENABLE ROW LEVEL SECURITY`. `hires` and `reviews` have UNIQUE constraints for idempotency (hire) and one-review-per-user enforcement (review).
+  - k-anonymity threshold = 3: `avg_rating` returns `None` when review count < 3; count is always returned for UX messaging.
+  - Profanity filter: `better_profanity` library applied in `BazaarService.submit_review()`. Review body is censored (not rejected) in Phase 3; full NeMo moderation in Phase 6.
+  - Agent publish/archive hooks: `AgentService.publish()` and `archive()` accept optional `BazaarService` + `BackgroundTasks` to index/deindex agents in Meilisearch asynchronously.
+  - Meilisearch search has SQL fallback: if Meilisearch is unavailable (returns empty), `BazaarRepository.list_published()` is used. O(log n) via `(status, updated_at DESC)` index.
+  - `better_profanity` and `meilisearch` added to `[[tool.mypy.overrides]] ignore_missing_imports` (no stubs shipped by those packages).
+  - FastAPI `Depends` with `Annotated` pattern used throughout (no `= ...` defaults); consistent with agents.py pattern.
+  - Frontend: catalog page (search + category filter + paginated grid), agent detail (hire button + reviews), hired view (with unhire). All 6 bazaar components use next-intl `bazaar.*` translation namespace.
+  - `ReviewForm` uses `<fieldset>/<legend>` for the star rating group (correct a11y for button-group controls) and `htmlFor`/`id` for the textarea label — Biome `noLabelWithoutControl` satisfied.
+  - 16 unit tests; all pass. ruff, mypy strict, biome ci, tsc all clean.
+- Outstanding:
+  - Kong rate-limit routes for `/api/v1/bazaar/search` (30 rpm) and `/api/v1/workspaces/*/hires` (10 rpm) noted in `kong.yml` comments but not active-route entries — Kong declarative rate-limiting requires a service/route binding. Activate in Phase 7 alongside full API hardening.
+  - Meilisearch backfill task (index all currently-published agents on first Phase 3 deploy) is a manual step. Can be done via a one-off data migration or CLI command.
+  - Frontend `token = ""` placeholder still present — session token wiring deferred to Phase 7 auth-integration pass.
+- ADRs added: —
