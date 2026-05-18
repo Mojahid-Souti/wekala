@@ -25,7 +25,7 @@ export function SignupForm() {
     setLoading(true);
     try {
       await api.auth.signup(email, password);
-      router.push(ROUTES.verify);
+      router.push(`${ROUTES.verify}?email=${encodeURIComponent(email)}`);
     } catch {
       setError(te("signupFailed"));
     } finally {

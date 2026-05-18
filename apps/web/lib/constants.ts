@@ -15,7 +15,7 @@ export const ROUTES = {
   hired: "/bazaar/hired",
 } as const;
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost:8000";
 

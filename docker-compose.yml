@@ -160,6 +160,11 @@ services:
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: "/auth/v1/verify"
       GOTRUE_MAILER_URLPATHS_RECOVERY: "/auth/v1/verify"
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: "/auth/v1/verify"
+      # OTP: 10-minute expiry; one-time use enforced by GoTrue
+      GOTRUE_MAILER_OTP_EXP: "600"
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: "/etc/gotrue/templates/confirmation.html"
+    volumes:
+      - ./infra/supabase/templates:/etc/gotrue/templates:ro
     networks:
       - supabase_net
     depends_on:
@@ -802,10 +807,14 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8001
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
     container_name: wekala-web
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_API_URL: http://localhost:8001
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       HOSTNAME: "0.0.0.0"
