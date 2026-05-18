@@ -34,6 +34,8 @@ services:
       - ./infra/supabase/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/migrations/99-jwt.sql:ro
       - ./infra/supabase/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
       - ./infra/supabase/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/migrations/97-webhooks.sql:ro
+    ports:
+      - "5432:5432"
     networks:
       - supabase_net
     healthcheck:

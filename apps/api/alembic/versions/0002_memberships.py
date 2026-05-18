@@ -65,8 +65,25 @@ def upgrade() -> None:
         "CREATE POLICY membership_service ON memberships USING (auth.role() = 'service_role')"
     )
 
+    # Workspace RLS policies that reference memberships — deferred from 0001
+    op.execute("""
+        CREATE POLICY workspace_select ON workspaces FOR SELECT
+        USING (id IN (
+            SELECT workspace_id FROM memberships WHERE user_id = auth.uid()
+        ))
+    """)
+    op.execute("""
+        CREATE POLICY workspace_update ON workspaces FOR UPDATE
+        USING (id IN (
+            SELECT workspace_id FROM memberships
+            WHERE user_id = auth.uid() AND role = 'admin'
+        ))
+    """)
+
 
 def downgrade() -> None:
+    op.execute("DROP POLICY IF EXISTS workspace_update ON workspaces")
+    op.execute("DROP POLICY IF EXISTS workspace_select ON workspaces")
     op.execute("DROP POLICY IF EXISTS membership_service ON memberships")
     op.execute("DROP POLICY IF EXISTS membership_select ON memberships")
     op.drop_index("ix_memberships_user_id", table_name="memberships")

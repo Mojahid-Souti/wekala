@@ -54,22 +54,10 @@ def upgrade() -> None:
 
     # RLS
     op.execute("ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY")
-    op.execute("""
-        CREATE POLICY workspace_select ON workspaces FOR SELECT
-        USING (id IN (
-            SELECT workspace_id FROM memberships WHERE user_id = auth.uid()
-        ))
-    """)
+    # workspace_select and workspace_update reference memberships — added in 0002
     op.execute("""
         CREATE POLICY workspace_insert ON workspaces FOR INSERT
         WITH CHECK (owner_id = auth.uid())
-    """)
-    op.execute("""
-        CREATE POLICY workspace_update ON workspaces FOR UPDATE
-        USING (id IN (
-            SELECT workspace_id FROM memberships
-            WHERE user_id = auth.uid() AND role = 'admin'
-        ))
     """)
     # Service role bypass (for API server using service key)
     op.execute("CREATE POLICY workspace_service ON workspaces USING (auth.role() = 'service_role')")
@@ -77,9 +65,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP POLICY IF EXISTS workspace_service ON workspaces")
-    op.execute("DROP POLICY IF EXISTS workspace_update ON workspaces")
     op.execute("DROP POLICY IF EXISTS workspace_insert ON workspaces")
-    op.execute("DROP POLICY IF EXISTS workspace_select ON workspaces")
+    # workspace_select and workspace_update are dropped in 0002 downgrade
     op.drop_index("ix_workspaces_owner_id", table_name="workspaces")
     op.drop_index("ix_workspaces_slug", table_name="workspaces")
     op.drop_table("workspaces")
