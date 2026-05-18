@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { AgentStatusBadge } from "@/components/agent/agent-status-badge";
 import { VersionList } from "@/components/agent/version-list";
 import { api } from "@/lib/api";
@@ -7,12 +9,12 @@ import { ROUTES } from "@/lib/constants";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { use, useState } from "react";
 
-type Props = { params: { workspaceId: string; agentId: string } };
+type Props = { params: Promise<{ workspaceId: string; agentId: string }> };
 
 export default function AgentDetailPage({ params }: Props) {
-  const { workspaceId, agentId } = params;
+  const { workspaceId, agentId } = use(params);
   const t = useTranslations("agent.detail");
   const router = useRouter();
   const qc = useQueryClient();

@@ -1,19 +1,21 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { AgentCard } from "@/components/agent/agent-card";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useState } from "react";
+import { use, useState } from "react";
 
 const STATUS_FILTERS = ["", "draft", "published", "archived"] as const;
 
-type Props = { params: { workspaceId: string } };
+type Props = { params: Promise<{ workspaceId: string }> };
 
 export default function AgentsPage({ params }: Props) {
-  const { workspaceId } = params;
+  const { workspaceId } = use(params);
   const t = useTranslations("agent.list");
   const [statusFilter, setStatusFilter] = useState<string>("");
 

@@ -1,4 +1,6 @@
 "use client";
+
+export const dynamic = "force-dynamic";
 import { WorkspaceCard } from "@/components/workspace/workspace-card";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";

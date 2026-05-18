@@ -1,17 +1,19 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { use, useState } from "react";
 
-type Props = { params: { workspaceId: string } };
+type Props = { params: Promise<{ workspaceId: string }> };
 type Tab = "upload" | "template";
 
 export default function NewAgentPage({ params }: Props) {
-  const { workspaceId } = params;
+  const { workspaceId } = use(params);
   const t = useTranslations("agent.new");
   const router = useRouter();
 

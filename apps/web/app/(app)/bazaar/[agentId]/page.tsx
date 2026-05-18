@@ -1,21 +1,23 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { HireButton } from "@/components/bazaar/hire-button";
 import { RatingStars } from "@/components/bazaar/rating-stars";
 import { ReviewForm } from "@/components/bazaar/review-form";
 import { api } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { use, useState } from "react";
 
 // Workspace / token come from session in full implementation
 const WORKSPACE_ID = "";
 const TOKEN = "";
 
-type Props = { params: { agentId: string } };
+type Props = { params: Promise<{ agentId: string }> };
 
 export default function BazaarAgentDetailPage({ params }: Props) {
-  const { agentId } = params;
+  const { agentId } = use(params);
   const t = useTranslations("bazaar");
   const qc = useQueryClient();
   const [reviewPage, setReviewPage] = useState(1);

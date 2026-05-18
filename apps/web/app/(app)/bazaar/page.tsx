@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { BazaarAgentCard } from "@/components/bazaar/bazaar-agent-card";
 import { CategoryFilter } from "@/components/bazaar/category-filter";
 import { SearchBar } from "@/components/bazaar/search-bar";
@@ -9,13 +11,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 
 // Workspace comes from URL in full implementation; placeholder for Phase 3
 const WORKSPACE_ID = "";
 const TOKEN = "";
 
-export default function BazaarPage() {
+function BazaarCatalog() {
   const t = useTranslations("bazaar");
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -96,7 +98,6 @@ export default function BazaarPage() {
             ))}
           </div>
 
-          {/* Pagination */}
           <div className="mt-6 flex items-center justify-between text-sm text-gray-500">
             <span>{data.total} agents</span>
             <div className="flex gap-2">
@@ -122,5 +123,13 @@ export default function BazaarPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function BazaarPage() {
+  return (
+    <Suspense fallback={<div className="h-40 animate-pulse rounded-lg bg-gray-100" />}>
+      <BazaarCatalog />
+    </Suspense>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+
+export const dynamic = "force-dynamic";
 import { ROUTES } from "@/lib/constants";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
