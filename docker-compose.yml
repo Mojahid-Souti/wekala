@@ -760,8 +760,9 @@ services:
 
   # ===========================================================================
   # CLAMAV — Virus scanner sidecar (Phase 4: document upload safety)
-  # Listens on TCP 3310 (clamd). 512 MB RAM limit (virus definitions ~300 MB).
-  # start_period: 120s — ClamAV loads definitions before accepting connections.
+  # Listens on TCP 3310 (clamd default config). Needs ~1.2 GB RAM to load
+  # virus databases (3.3M sigs). No memory limit — ClamAV is a safety control.
+  # start_period: 300s — first-boot freshclam download + clamd DB load.
   # ===========================================================================
 
   wekala-clamav:
@@ -771,15 +772,11 @@ services:
     networks:
       - wekala_net
     healthcheck:
-      test: ["CMD-SHELL", "clamdcheck || exit 1"]
-      interval: 60s
-      timeout: 30s
-      retries: 3
-      start_period: 120s
-    deploy:
-      resources:
-        limits:
-          memory: 512m
+      test: ["CMD-SHELL", "nc -z localhost 3310"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
 
   # ===========================================================================
   # WEKALA API — FastAPI backend (Phase 1: auth, workspaces, RBAC)
