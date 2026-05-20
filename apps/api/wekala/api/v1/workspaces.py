@@ -90,8 +90,7 @@ async def create_workspace(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceOut:
     svc = WorkspaceService(db)
-    async with db.begin():
-        ws = await svc.create(name=body.name, owner_id=current_user.id)
+    ws = await svc.create(name=body.name, owner_id=current_user.id)
     return WorkspaceOut.from_model(ws)
 
 
@@ -131,13 +130,12 @@ async def invite_member(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     svc = WorkspaceService(db)
-    async with db.begin():
-        m = await svc.invite(
-            workspace_id=workspace_id,
-            inviter_id=current_user.id,
-            invitee_id=body.user_id,
-            role=body.role,
-        )
+    m = await svc.invite(
+        workspace_id=workspace_id,
+        inviter_id=current_user.id,
+        invitee_id=body.user_id,
+        role=body.role,
+    )
     return MemberOut.from_model(m)
 
 
@@ -162,8 +160,7 @@ async def update_member_role(
 ) -> MemberOut:
     current_user, _ = caller
     svc = WorkspaceService(db)
-    async with db.begin():
-        m = await svc.update_role(workspace_id, current_user.id, user_id, body.role)
+    m = await svc.update_role(workspace_id, current_user.id, user_id, body.role)
     if not m:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
     return MemberOut.from_model(m)
@@ -178,8 +175,7 @@ async def remove_member(
 ) -> None:
     current_user, _ = caller
     svc = WorkspaceService(db)
-    async with db.begin():
-        await svc.remove_member(workspace_id, current_user.id, user_id)
+    await svc.remove_member(workspace_id, current_user.id, user_id)
 
 
 @router.post("/{workspace_id}/api-keys", response_model=ApiKeyCreatedOut, status_code=201)
@@ -191,8 +187,7 @@ async def create_api_key(
 ) -> ApiKeyCreatedOut:
     current_user, _ = caller
     svc = ApiKeyService(db)
-    async with db.begin():
-        record, plaintext = await svc.generate(workspace_id, body.name, current_user.id)
+    record, plaintext = await svc.generate(workspace_id, body.name, current_user.id)
     return ApiKeyCreatedOut(
         id=record.id,
         name=record.name,
@@ -230,7 +225,6 @@ async def revoke_api_key(
 ) -> None:
     current_user, _ = caller
     svc = ApiKeyService(db)
-    async with db.begin():
-        result = await svc.revoke(key_id, current_user.id, workspace_id)
+    result = await svc.revoke(key_id, current_user.id, workspace_id)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")

@@ -16,5 +16,7 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
-    async with AsyncSessionLocal() as session:
+    # begin() wraps the whole request in one transaction: auto-commit on success,
+    # auto-rollback on exception. Endpoints never need to call db.commit().
+    async with AsyncSessionLocal.begin() as session:
         yield session

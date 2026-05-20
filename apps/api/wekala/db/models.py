@@ -3,10 +3,12 @@ from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint,
+    Column,
     ForeignKey,
     Integer,
     SmallInteger,
     String,
+    Table,
     Text,
     UniqueConstraint,
     func,
@@ -17,6 +19,17 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     pass
+
+
+# Stub for the Supabase-managed auth.users table. Registered here so SQLAlchemy
+# can resolve cross-schema ForeignKey references at the Python layer.
+# Never created or dropped by our Alembic migrations (env.py filters it out).
+Table(
+    "users",
+    Base.metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    schema="auth",
+)
 
 
 class Workspace(Base):

@@ -155,15 +155,14 @@ async def create_kb(
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
-    async with svc._db.begin():
-        kb = await svc.create_kb(
-            workspace_id=workspace_id,
-            name=body.name,
-            description=body.description,
-            scope=body.scope,
-            agent_id=body.agent_id,
-            actor_id=current_user.id,
-        )
+    kb = await svc.create_kb(
+        workspace_id=workspace_id,
+        name=body.name,
+        description=body.description,
+        scope=body.scope,
+        agent_id=body.agent_id,
+        actor_id=current_user.id,
+    )
     return KBOut(**kb)
 
 
@@ -207,8 +206,7 @@ async def delete_kb(
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
-    async with svc._db.begin():
-        await svc.delete_kb(kb_id, workspace_id, current_user.id)
+    await svc.delete_kb(kb_id, workspace_id, current_user.id)
 
 
 # ---------------------------------------------------------------------------
@@ -234,14 +232,13 @@ async def upload_document(
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
-    async with svc._db.begin():
-        result = await svc.upload_document(
-            kb_id=kb_id,
-            workspace_id=workspace_id,
-            actor_id=current_user.id,
-            file=file,
-            background_tasks=background_tasks,
-        )
+    result = await svc.upload_document(
+        kb_id=kb_id,
+        workspace_id=workspace_id,
+        actor_id=current_user.id,
+        file=file,
+        background_tasks=background_tasks,
+    )
     return UploadAcceptedOut(
         document_id=result["document_id"],
         status=result["status"],
@@ -293,8 +290,7 @@ async def delete_document(
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Access denied")
 
-    async with svc._db.begin():
-        await svc.delete_document(doc_id, workspace_id, current_user.id)
+    await svc.delete_document(doc_id, workspace_id, current_user.id)
 
 
 # ---------------------------------------------------------------------------
