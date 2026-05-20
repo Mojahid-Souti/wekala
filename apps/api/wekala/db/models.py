@@ -269,3 +269,107 @@ class AgentCategory(Base):
     category_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — Knowledge Base & RAG
+# ---------------------------------------------------------------------------
+
+
+class KnowledgeBase(Base):
+    __tablename__ = "knowledge_bases"
+    __table_args__ = (
+        CheckConstraint("char_length(name) BETWEEN 2 AND 100", name="kb_name_length"),
+        CheckConstraint("scope IN ('workspace','agent')", name="kb_valid_scope"),
+        CheckConstraint("status IN ('active','archived')", name="kb_valid_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # 'workspace' = shared KB; 'agent' = private to one agent
+    scope: Mapped[str] = mapped_column(String(20), nullable=False, default="workspace")
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class KBDocument(Base):
+    """Represents one uploaded file within a KnowledgeBase."""
+
+    __tablename__ = "kb_documents"
+    __table_args__ = (
+        CheckConstraint("file_type IN ('pdf','docx','txt','md','html')", name="kb_doc_valid_type"),
+        CheckConstraint(
+            "status IN ('pending','processing','ready','failed')", name="kb_doc_valid_status"
+        ),
+        CheckConstraint("file_size > 0", name="kb_doc_positive_size"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kb_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    file_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Path in Supabase Storage: ws/{workspace_id}/kb/{kb_id}/{doc_id}/{filename}
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256 hex
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doc_metadata: Mapped[dict] = mapped_column(  # type: ignore[type-arg]
+        "metadata", JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class KBChunk(Base):
+    """One semantic chunk of a KBDocument with its embedding vector."""
+
+    __tablename__ = "kb_chunks"
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_chunk"),
+        CheckConstraint("token_count > 0", name="kb_chunk_positive_tokens"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_documents.id", ondelete="CASCADE"), nullable=False
+    )
+    kb_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # embedding stored as text (pgvector type registered in migration) — None until embedded
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_metadata: Mapped[dict] = mapped_column(  # type: ignore[type-arg]
+        "metadata", JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

@@ -759,6 +759,29 @@ services:
           memory: 64m
 
   # ===========================================================================
+  # CLAMAV — Virus scanner sidecar (Phase 4: document upload safety)
+  # Listens on TCP 3310 (clamd). 512 MB RAM limit (virus definitions ~300 MB).
+  # start_period: 120s — ClamAV loads definitions before accepting connections.
+  # ===========================================================================
+
+  wekala-clamav:
+    image: clamav/clamav:1.4
+    container_name: wekala-clamav
+    restart: unless-stopped
+    networks:
+      - wekala_net
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck || exit 1"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ===========================================================================
   # WEKALA API — FastAPI backend (Phase 1: auth, workspaces, RBAC)
   # Internal only — exposed via Kong at /api/v1/*. No direct external port.
   # ===========================================================================
@@ -777,6 +800,16 @@ services:
       WEKALA_SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       OPA_URL: http://opa:8181
+      # Phase 4 — Knowledge Base & RAG
+      CLAMAV_HOST: wekala-clamav
+      CLAMAV_PORT: "3310"
+      OLLAMA_URL: http://ollama:11434
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      EMBEDDING_BATCH_SIZE: "32"
+      DOCUMENT_MAX_MB: "50"
+      DOCUMENT_CHUNK_TOKENS: "1024"
+      DOCUMENT_CHUNK_OVERLAP: "128"
+      SUPABASE_STORAGE_URL: http://supabase-storage:5000
     ports:
       - "8001:8001"
     networks:
@@ -786,6 +819,8 @@ services:
       supabase-db:
         condition: service_healthy
       opa:
+        condition: service_healthy
+      wekala-clamav:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz')\" || exit 1"]

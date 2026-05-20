@@ -38,6 +38,14 @@ min_role := {
   "hire.view":         "viewer",
   "review.create":     "hirer",
   "review.view":       "viewer",
+  # Knowledge Base & RAG (Phase 4)
+  "kb.create":         "builder",
+  "kb.view":           "viewer",
+  "kb.delete":         "builder",
+  "kb.search":         "viewer",
+  "document.upload":   "builder",
+  "document.view":     "viewer",
+  "document.delete":   "builder",
 }
 
 # default deny

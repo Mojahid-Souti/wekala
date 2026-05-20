@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     meilisearch_url: str = "http://wekala-meilisearch:7700"
     meilisearch_master_key: str = ""  # MEILI_MASTER_KEY from env
 
+    # Knowledge Base & RAG (Phase 4)
+    clamav_host: str = "wekala-clamav"
+    clamav_port: int = 3310
+    ollama_url: str = "http://ollama:11434"
+    embedding_model: str = "bge-m3"
+    embedding_batch_size: int = 32
+    document_max_mb: int = 50
+    document_chunk_tokens: int = 1024
+    document_chunk_overlap: int = 128
+    supabase_storage_url: str = "http://supabase-storage:5000"
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.wekala_cors_origins.split(",")]

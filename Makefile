@@ -191,7 +191,7 @@ format: ## Auto-fix formatting (Python + TypeScript)
 ##@ Testing
 
 .PHONY: test
-test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-py test-ts ## Run all tests
+test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-phase-4 test-py test-ts ## Run all tests
 
 .PHONY: test-phase-0
 test-phase-0: ## Run Phase 0 automated integration tests (requires running stack)
@@ -270,6 +270,41 @@ test-phase-3: ## Verify Phase 3 required files are present and unit tests pass
 	@echo ""
 	@echo "$(BOLD)Phase 3 unit tests:$(RESET)"
 	@cd apps/api && uv run pytest tests/test_bazaar.py -v
+
+.PHONY: test-phase-4
+test-phase-4: ## Verify Phase 4 required files are present and unit tests pass
+	@echo "$(BOLD)Phase 4 file validation:$(RESET)"
+	@missing=0; \
+	files=( \
+	  "apps/api/wekala/adapters/document_processor/base.py" \
+	  "apps/api/wekala/adapters/document_processor/pypdf_adapter.py" \
+	  "apps/api/wekala/adapters/embedding/base.py" \
+	  "apps/api/wekala/adapters/embedding/ollama.py" \
+	  "apps/api/wekala/adapters/virus_scanner/base.py" \
+	  "apps/api/wekala/adapters/virus_scanner/clamav.py" \
+	  "apps/api/wekala/adapters/storage/base.py" \
+	  "apps/api/wekala/adapters/storage/supabase.py" \
+	  "apps/api/wekala/db/repositories/knowledge_base.py" \
+	  "apps/api/wekala/services/kb_service.py" \
+	  "apps/api/wekala/api/v1/knowledge_base.py" \
+	  "apps/api/alembic/versions/0011_knowledge_bases.py" \
+	  "apps/api/alembic/versions/0012_kb_chunks.py" \
+	  "apps/api/tests/test_kb.py" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/knowledge-base/page.tsx" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/knowledge-base/[kbId]/upload/page.tsx" \
+	  "apps/web/components/kb/document-card.tsx" \
+	  "apps/web/components/kb/upload-form.tsx" \
+	  "apps/web/components/kb/search-results.tsx" \
+	  "docs/phases/MANUAL_TEST_PHASE_4.md" \
+	); \
+	for f in "$${files[@]}"; do \
+	  if [ ! -f "$$f" ]; then echo "  MISSING: $$f"; missing=$$((missing+1)); \
+	  else echo "  $(GREEN)✓$(RESET) $$f"; fi; \
+	done; \
+	[ "$$missing" -eq 0 ] && echo "$(GREEN)All Phase 4 files present.$(RESET)" || { echo "$(BOLD)$$missing file(s) missing.$(RESET)"; exit 1; }
+	@echo ""
+	@echo "$(BOLD)Phase 4 unit tests:$(RESET)"
+	@cd apps/api && uv run pytest tests/test_kb.py -v
 
 .PHONY: test-py
 test-py: ## Run Python unit tests with pytest

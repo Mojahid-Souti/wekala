@@ -63,6 +63,7 @@
     "dashboard": "Dashboard",
     "agents": "Agents",
     "bazaar": "Bazaar",
+    "knowledgeBase": "Knowledge Base",
     "settings": "Settings",
     "signOut": "Sign out"
   },
@@ -151,6 +152,79 @@
       "hireFailed": "Hire failed. Please try again.",
       "reviewFailed": "Review submission failed. Please try again.",
       "generic": "Something went wrong. Please try again."
+    }
+  },
+  "knowledgeBase": {
+    "title": "Knowledge Base",
+    "description": "Upload and manage documents. Agents can search them to ground their responses.",
+    "newKB": "New Knowledge Base",
+    "emptyKBs": "No knowledge bases yet. Create one to start uploading documents.",
+    "kb": {
+      "scope": {
+        "workspace": "Workspace",
+        "agent": "Agent"
+      },
+      "status": {
+        "active": "Active",
+        "archived": "Archived"
+      },
+      "documentsCount": "{count, plural, one {# document} other {# documents}}"
+    },
+    "createKB": {
+      "title": "Create Knowledge Base",
+      "nameLabel": "Name",
+      "namePlaceholder": "HR Policies, Product Manual…",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "What documents will this KB contain?",
+      "scopeLabel": "Scope",
+      "workspaceScope": "Workspace — shared with all members",
+      "agentScope": "Agent — private to one agent",
+      "createButton": "Create",
+      "creating": "Creating…",
+      "success": "Knowledge base created.",
+      "error": "Failed to create knowledge base."
+    },
+    "upload": {
+      "title": "Upload Document",
+      "dropzone": "Drop a file here or click to browse",
+      "dropzoneHint": "PDF, DOCX, TXT, MD, HTML · max 50 MB",
+      "uploadButton": "Upload",
+      "uploading": "Uploading…",
+      "successTitle": "Upload accepted",
+      "successMessage": "Your document is being processed. Status will update automatically.",
+      "duplicateMessage": "This file already exists in the knowledge base.",
+      "errorFileTooLarge": "File exceeds the 50 MB limit.",
+      "errorFileType": "File type not allowed. Use PDF, DOCX, TXT, MD, or HTML.",
+      "errorGeneric": "Upload failed. Please try again."
+    },
+    "document": {
+      "status": {
+        "pending": "Pending",
+        "processing": "Processing",
+        "ready": "Ready",
+        "failed": "Failed"
+      },
+      "deleteButton": "Delete",
+      "deleteConfirm": "Delete this document and all its indexed chunks?",
+      "deleteError": "Delete failed. Please try again.",
+      "pages": "{count, plural, one {# page} other {# pages}}",
+      "tokens": "{count} tokens"
+    },
+    "search": {
+      "placeholder": "Search documents…",
+      "searchButton": "Search",
+      "searching": "Searching…",
+      "noResults": "No results found.",
+      "resultsTitle": "Search Results",
+      "source": "Source: {filename}, page {page}",
+      "topK": "Top results"
+    },
+    "errors": {
+      "loadFailed": "Failed to load knowledge bases.",
+      "createFailed": "Failed to create knowledge base.",
+      "deleteFailed": "Failed to delete.",
+      "uploadFailed": "Upload failed.",
+      "searchFailed": "Search failed."
     }
   }
 }

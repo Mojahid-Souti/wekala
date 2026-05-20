@@ -13,6 +13,9 @@ export const ROUTES = {
   bazaar: "/bazaar",
   bazaarAgent: (agentId: string) => `/bazaar/${agentId}`,
   hired: "/bazaar/hired",
+  knowledgeBase: (workspaceId: string) => `/workspaces/${workspaceId}/knowledge-base`,
+  kbUpload: (workspaceId: string, kbId: string) =>
+    `/workspaces/${workspaceId}/knowledge-base/${kbId}/upload`,
 } as const;
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";

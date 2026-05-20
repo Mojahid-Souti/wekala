@@ -41,6 +41,14 @@ class Action(StrEnum):
     REVIEW_CREATE = "review.create"
     REVIEW_VIEW = "review.view"
     BAZAAR_SEARCH = "bazaar.search"
+    # Knowledge Base & RAG (Phase 4)
+    KB_CREATE = "kb.create"
+    KB_VIEW = "kb.view"
+    KB_DELETE = "kb.delete"
+    DOCUMENT_UPLOAD = "document.upload"
+    DOCUMENT_VIEW = "document.view"
+    DOCUMENT_DELETE = "document.delete"
+    KB_SEARCH = "kb.search"
 
 
 class ResourceType(StrEnum):
@@ -52,6 +60,9 @@ class ResourceType(StrEnum):
     HIRE = "hire"
     REVIEW = "review"
     CATEGORY = "category"
+    # Phase 4
+    KB = "knowledge_base"
+    DOCUMENT = "document"
 
 
 class Outcome(StrEnum):

@@ -234,4 +234,108 @@ export const api = {
     unhire: (workspaceId: string, agentId: string, token: string) =>
       request<void>(`/v1/workspaces/${workspaceId}/hires/${agentId}`, { method: "DELETE" }, token),
   },
+  kb: {
+    listKBs: (workspaceId: string, token: string, page = 1) =>
+      request<{ items: KBOut[]; total: number; page: number; size: number }>(
+        `/v1/workspaces/${workspaceId}/kbs?page=${page}`,
+        {},
+        token
+      ),
+    createKB: (
+      workspaceId: string,
+      body: { name: string; description?: string; scope?: string; agent_id?: string | null },
+      token: string
+    ) =>
+      request<KBOut>(
+        `/v1/workspaces/${workspaceId}/kbs`,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+        token
+      ),
+    getKB: (workspaceId: string, kbId: string, token: string) =>
+      request<KBOut>(`/v1/workspaces/${workspaceId}/kbs/${kbId}`, {}, token),
+    deleteKB: (workspaceId: string, kbId: string, token: string) =>
+      request<void>(`/v1/workspaces/${workspaceId}/kbs/${kbId}`, { method: "DELETE" }, token),
+    listDocuments: (workspaceId: string, kbId: string, token: string, page = 1) =>
+      request<{ items: KBDocumentOut[]; total: number; page: number; size: number }>(
+        `/v1/workspaces/${workspaceId}/kbs/${kbId}/documents?page=${page}`,
+        {},
+        token
+      ),
+    getDocument: (workspaceId: string, kbId: string, docId: string, token: string) =>
+      request<KBDocumentOut>(
+        `/v1/workspaces/${workspaceId}/kbs/${kbId}/documents/${docId}`,
+        {},
+        token
+      ),
+    uploadDocument: (workspaceId: string, kbId: string, file: File, token: string) => {
+      const form = new FormData();
+      form.append("file", file);
+      return request<KBUploadAcceptedOut>(
+        `/v1/workspaces/${workspaceId}/kbs/${kbId}/documents`,
+        { method: "POST", body: form, headers: {} },
+        token
+      );
+    },
+    deleteDocument: (workspaceId: string, kbId: string, docId: string, token: string) =>
+      request<void>(
+        `/v1/workspaces/${workspaceId}/kbs/${kbId}/documents/${docId}`,
+        { method: "DELETE" },
+        token
+      ),
+    search: (workspaceId: string, kbId: string, query: string, topK: number, token: string) =>
+      request<KBSearchOut>(
+        `/v1/workspaces/${workspaceId}/kbs/${kbId}/search`,
+        { method: "POST", body: JSON.stringify({ query, top_k: topK }) },
+        token
+      ),
+  },
+};
+
+export type KBOut = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string;
+  scope: string;
+  agent_id: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type KBDocumentOut = {
+  id: string;
+  kb_id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  status: string;
+  error_detail: string | null;
+  page_count: number | null;
+  token_count: number | null;
+  created_at: string;
+};
+
+export type KBUploadAcceptedOut = {
+  document_id: string;
+  status: string;
+  duplicate: boolean;
+  message: string;
+};
+
+export type KBSearchResultItem = {
+  chunk_id: string;
+  document_id: string;
+  filename: string;
+  content: string;
+  chunk_metadata: Record<string, unknown>;
+  score: number;
+  rrf_score: number;
+};
+
+export type KBSearchOut = {
+  results: KBSearchResultItem[];
+  total: number;
 };
