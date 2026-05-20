@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { AgentCard } from "@/components/agent/agent-card";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
+import { useToken } from "@/lib/use-token";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -20,7 +21,7 @@ export default function AgentsPage({ params }: Props) {
   const [statusFilter, setStatusFilter] = useState<string>("");
 
   // token would come from session cookie / context in full implementation
-  const token = "";
+  const token = useToken();
 
   const { data, isLoading } = useQuery({
     queryKey: ["agents", workspaceId, statusFilter],

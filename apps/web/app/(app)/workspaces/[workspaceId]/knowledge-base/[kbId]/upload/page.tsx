@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { UploadForm } from "@/components/kb/upload-form";
 import type { KBUploadAcceptedOut } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
+import { useToken } from "@/lib/use-token";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
@@ -15,7 +16,7 @@ export default function KBUploadPage({ params }: Props) {
   const { workspaceId, kbId } = use(params);
   const t = useTranslations("knowledgeBase");
   const router = useRouter();
-  const token = "";
+  const token = useToken();
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 

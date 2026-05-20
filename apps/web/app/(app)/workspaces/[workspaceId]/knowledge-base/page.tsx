@@ -6,6 +6,7 @@ import { DocumentCard } from "@/components/kb/document-card";
 import { SearchResults } from "@/components/kb/search-results";
 import { UploadForm } from "@/components/kb/upload-form";
 import { type KBOut, type KBSearchResultItem, type KBUploadAcceptedOut, api } from "@/lib/api";
+import { useToken } from "@/lib/use-token";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { use, useState } from "react";
@@ -16,7 +17,7 @@ export default function KnowledgeBasePage({ params }: Props) {
   const { workspaceId } = use(params);
   const t = useTranslations("knowledgeBase");
   const qc = useQueryClient();
-  const token = "";
+  const token = useToken();
 
   const [selectedKB, setSelectedKB] = useState<KBOut | null>(null);
   const [showCreate, setShowCreate] = useState(false);

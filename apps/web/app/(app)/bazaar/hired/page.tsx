@@ -4,22 +4,24 @@ export const dynamic = "force-dynamic";
 
 import { BazaarAgentCard } from "@/components/bazaar/bazaar-agent-card";
 import { api } from "@/lib/api";
+import { useToken } from "@/lib/use-token";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+// WORKSPACE_ID wired up in Phase 7 auth-integration pass
 const WORKSPACE_ID = "";
-const TOKEN = "";
 
 export default function HiredPage() {
   const t = useTranslations("bazaar.hired");
   const qc = useQueryClient();
+  const token = useToken();
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
     queryKey: ["hires", WORKSPACE_ID, page],
-    queryFn: () => api.hires.list(WORKSPACE_ID, TOKEN, page),
-    enabled: !!TOKEN,
+    queryFn: () => api.hires.list(WORKSPACE_ID, token, page),
+    enabled: !!token,
   });
 
   return (
@@ -48,7 +50,7 @@ export default function HiredPage() {
                 key={agent.id}
                 agent={{ ...agent, hired: true }}
                 workspaceId={WORKSPACE_ID}
-                token={TOKEN}
+                token={token}
                 onUnhire={() => qc.invalidateQueries({ queryKey: ["hires", WORKSPACE_ID] })}
               />
             ))}

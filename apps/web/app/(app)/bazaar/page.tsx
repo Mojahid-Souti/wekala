@@ -7,18 +7,19 @@ import { CategoryFilter } from "@/components/bazaar/category-filter";
 import { SearchBar } from "@/components/bazaar/search-bar";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
+import { useToken } from "@/lib/use-token";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useState } from "react";
 
-// Workspace comes from URL in full implementation; placeholder for Phase 3
+// Workspace comes from URL in full implementation; placeholder until Phase 7 auth pass
 const WORKSPACE_ID = "";
-const TOKEN = "";
 
 function BazaarCatalog() {
   const t = useTranslations("bazaar");
+  const token = useToken();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -40,14 +41,14 @@ function BazaarCatalog() {
 
   const { data: categories } = useQuery({
     queryKey: ["bazaar-categories"],
-    queryFn: () => api.bazaar.categories(TOKEN),
-    enabled: !!TOKEN,
+    queryFn: () => api.bazaar.categories(token),
+    enabled: !!token,
   });
 
   const { data, isLoading } = useQuery({
     queryKey: ["bazaar-catalog", q, selectedCats, page],
-    queryFn: () => api.bazaar.list(WORKSPACE_ID, TOKEN, { q, cat: selectedCats, page, size: 20 }),
-    enabled: !!TOKEN,
+    queryFn: () => api.bazaar.list(WORKSPACE_ID, token, { q, cat: selectedCats, page, size: 20 }),
+    enabled: !!token,
   });
 
   return (
@@ -93,7 +94,7 @@ function BazaarCatalog() {
                 key={agent.id}
                 agent={agent}
                 workspaceId={WORKSPACE_ID}
-                token={TOKEN}
+                token={token}
               />
             ))}
           </div>

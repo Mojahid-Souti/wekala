@@ -6,6 +6,7 @@ import { AgentStatusBadge } from "@/components/agent/agent-status-badge";
 import { VersionList } from "@/components/agent/version-list";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
+import { useToken } from "@/lib/use-token";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -18,7 +19,7 @@ export default function AgentDetailPage({ params }: Props) {
   const t = useTranslations("agent.detail");
   const router = useRouter();
   const qc = useQueryClient();
-  const token = ""; // from session
+  const token = useToken();
 
   const [testQuery, setTestQuery] = useState("");
   const [testResponse, setTestResponse] = useState<string | null>(null);

@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
+import { useToken } from "@/lib/use-token";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -22,7 +23,7 @@ export default function NewAgentPage({ params }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const token = ""; // from session
+  const token = useToken();
 
   const { data: templates } = useQuery({
     queryKey: ["templates"],

@@ -6,13 +6,13 @@ import { HireButton } from "@/components/bazaar/hire-button";
 import { RatingStars } from "@/components/bazaar/rating-stars";
 import { ReviewForm } from "@/components/bazaar/review-form";
 import { api } from "@/lib/api";
+import { useToken } from "@/lib/use-token";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { use, useState } from "react";
 
-// Workspace / token come from session in full implementation
+// WORKSPACE_ID wired up in Phase 7 auth-integration pass
 const WORKSPACE_ID = "";
-const TOKEN = "";
 
 type Props = { params: Promise<{ agentId: string }> };
 
@@ -20,18 +20,19 @@ export default function BazaarAgentDetailPage({ params }: Props) {
   const { agentId } = use(params);
   const t = useTranslations("bazaar");
   const qc = useQueryClient();
+  const token = useToken();
   const [reviewPage, setReviewPage] = useState(1);
 
   const { data: agent, isLoading } = useQuery({
     queryKey: ["bazaar-agent", agentId, WORKSPACE_ID],
-    queryFn: () => api.bazaar.get(agentId, WORKSPACE_ID, TOKEN),
-    enabled: !!TOKEN,
+    queryFn: () => api.bazaar.get(agentId, WORKSPACE_ID, token),
+    enabled: !!token,
   });
 
   const { data: reviews, isLoading: reviewsLoading } = useQuery({
     queryKey: ["bazaar-reviews", agentId, reviewPage],
-    queryFn: () => api.bazaar.reviews(agentId, TOKEN, reviewPage),
-    enabled: !!TOKEN,
+    queryFn: () => api.bazaar.reviews(agentId, token, reviewPage),
+    enabled: !!token,
   });
 
   if (isLoading) {
@@ -68,7 +69,7 @@ export default function BazaarAgentDetailPage({ params }: Props) {
         <HireButton
           agentId={agentId}
           workspaceId={WORKSPACE_ID}
-          token={TOKEN}
+          token={token}
           initialHired={agent.hired}
           onToggle={() => qc.invalidateQueries({ queryKey: ["bazaar-agent", agentId] })}
         />
@@ -106,7 +107,7 @@ export default function BazaarAgentDetailPage({ params }: Props) {
         <ReviewForm
           agentId={agentId}
           workspaceId={WORKSPACE_ID}
-          token={TOKEN}
+          token={token}
           onSuccess={() => {
             qc.invalidateQueries({ queryKey: ["bazaar-reviews", agentId] });
             qc.invalidateQueries({ queryKey: ["bazaar-agent", agentId] });
