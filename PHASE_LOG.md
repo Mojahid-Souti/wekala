@@ -118,3 +118,31 @@ Format:
   - Meilisearch backfill task (index all currently-published agents on first Phase 3 deploy) is a manual step. Can be done via a one-off data migration or CLI command.
   - Frontend `token = ""` placeholder still present — session token wiring deferred to Phase 7 auth-integration pass.
 - ADRs added: —
+
+---
+
+## Phase 4 — Knowledge Base & RAG
+
+- Started: 2026-05-20
+- Completed: 2026-05-20
+- Tag: phase-4-complete
+- Notes:
+  - All 4 adapter layers behind Protocol interfaces (Rule 5): `PypdfAdapter` (PDF/DOCX/TXT/MD/HTML → text), `OllamaEmbeddingAdapter` (BGE-M3 via Ollama REST, batched 32 chunks/call), `ClamAVAdapter` (TCP to clamd on port 3310), `SupabaseStorageAdapter` (httpx calls to Supabase Storage API).
+  - Magic-byte detection for file type validation (`b"%PDF"`, `b"PK\x03\x04"`) — not extension-only.
+  - SHA-256 content hash deduplication: same file to same KB returns the existing document ID immediately, no re-embedding.
+  - Sliding-window chunker: 1024-token window, 128-token overlap, word-count approximation. Partial tail chunks included (e.g., 10 words → 5 chunks with overlap=2, not 4).
+  - Hybrid search: pgvector HNSW (m=16, ef_construction=64, cosine ops) + Meilisearch BM25, fused via RRF (k=60). O(log n) per leg.
+  - Background processing: FastAPI `BackgroundTasks` — upload returns 202 Accepted immediately; parse/embed/index runs async.
+  - Two Alembic migrations: 0011 (`knowledge_bases` + `kb_documents` + RLS), 0012 (`kb_chunks` + HNSW index + RLS).
+  - ClamAV sidecar (`clamav/clamav:1.4`, 512 MB memory limit) added to docker-compose; `wekala-api` `depends_on` it with `service_healthy`. `start_period: 120s` needed for virus definition loading.
+  - OPA `min_role` extended with `kb.*` and `document.*` actions.
+  - Frontend dropzone uses `<label htmlFor="kb-file-input">` wrapping a hidden `<input type="file">` — semantically correct, avoids Biome a11y rules (`noNoninteractiveTabindex`, `useSemanticElements`, `useKeyWithClickEvents`).
+  - `uv python pin 3.13` required: `spacy` (presidio-analyzer dep) only ships cp313 wheels, not cp314. Created `apps/api/.python-version`.
+  - 22 unit tests for KB service, chunker, type detection, and RRF fusion; all pass.
+- Outstanding:
+  - `make migrate` must be run to apply 0011/0012 before using KB endpoints.
+  - `wekala-clamav` container first boot downloads ~500 MB virus definitions — allow 2–3 minutes.
+  - Frontend `token = ""` placeholder still present — session token wiring deferred to Phase 7.
+  - OCR (pytesseract) path works for image PDFs but requires `tesseract-ocr` installed in the API container. Add to Dockerfile in a follow-up.
+  - Presidio PII scan flags metadata only in Phase 4; enforcement (block uploads) deferred to Phase 6.
+- ADRs added: —
