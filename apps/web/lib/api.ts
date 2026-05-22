@@ -1,17 +1,59 @@
-import { API_URL } from "./constants";
+import { API_URL, ROUTES } from "./constants";
+
+function handleExpiredSession(): void {
+  // Only run in browser; avoid loop if already on an auth page.
+  if (typeof window === "undefined") return;
+  if (window.location.pathname.startsWith("/login")) return;
+  sessionStorage.removeItem("access_token");
+  sessionStorage.removeItem("refresh_token");
+  window.location.href = `${ROUTES.login}?expired=1`;
+}
+
+function formatErrorDetail(detail: unknown, status: number): string {
+  // FastAPI returns either a string (HTTPException) or an array of
+  // Pydantic-validation objects (RequestValidationError). Format the array
+  // into a human-readable single line so toasts/banners don't show
+  // "[object Object]".
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => {
+        if (typeof d === "string") return d;
+        if (d && typeof d === "object" && "msg" in d) {
+          const loc = Array.isArray((d as { loc?: unknown[] }).loc)
+            ? (d as { loc: unknown[] }).loc.join(".")
+            : "";
+          return loc ? `${loc}: ${(d as { msg: string }).msg}` : (d as { msg: string }).msg;
+        }
+        return JSON.stringify(d);
+      })
+      .join("; ");
+  }
+  if (detail && typeof detail === "object") return JSON.stringify(detail);
+  return `HTTP ${status}`;
+}
 
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+  // FormData (file uploads) needs the browser to set the multipart boundary;
+  // forcing JSON Content-Type would corrupt the upload and cause a 422.
+  const isFormData = options.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(!isFormData && { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string>),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
+  if (res.status === 401 && token) {
+    // Token was present but rejected → expired or revoked. Clear + redirect to login.
+    handleExpiredSession();
+    throw new Error("Session expired");
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? `HTTP ${res.status}`);
+    throw new Error(formatErrorDetail(body.detail, res.status));
   }
 
   if (res.status === 204) return undefined as T;
@@ -29,6 +71,7 @@ export type AgentOut = {
   version: number;
   language: string;
   classification: string;
+  vetting_status: string;
   dify_app_id: string | null;
   created_at: string;
   updated_at: string;
@@ -104,10 +147,60 @@ export const api = {
     me: (token: string) => request("/v1/auth/me", {}, token),
   },
   workspaces: {
-    create: (name: string, token: string) =>
-      request("/v1/workspaces", { method: "POST", body: JSON.stringify({ name }) }, token),
+    create: (name: string, description: string, token: string) =>
+      request<{ id: string; name: string; slug: string; description: string; owner_id: string }>(
+        "/v1/workspaces",
+        { method: "POST", body: JSON.stringify({ name, description }) },
+        token
+      ),
     list: (token: string) =>
-      request<{ id: string; name: string; slug: string }[]>("/v1/workspaces", {}, token),
+      request<{ id: string; name: string; slug: string; description: string }[]>(
+        "/v1/workspaces",
+        {},
+        token
+      ),
+    get: (workspaceId: string, token: string) =>
+      request<{ id: string; name: string; slug: string; description: string; owner_id: string }>(
+        `/v1/workspaces/${workspaceId}`,
+        {},
+        token
+      ),
+    update: (workspaceId: string, name: string, description: string, token: string) =>
+      request<{ id: string; name: string; slug: string; description: string; owner_id: string }>(
+        `/v1/workspaces/${workspaceId}`,
+        { method: "PUT", body: JSON.stringify({ name, description }) },
+        token
+      ),
+    delete: (workspaceId: string, token: string) =>
+      request<void>(`/v1/workspaces/${workspaceId}`, { method: "DELETE" }, token),
+    members: {
+      list: (workspaceId: string, token: string) =>
+        request<{ user_id: string; role: string; invited_by: string | null }[]>(
+          `/v1/workspaces/${workspaceId}/members`,
+          {},
+          token
+        ),
+      invite: (workspaceId: string, userId: string, role: string, token: string) =>
+        request<{ user_id: string; role: string; invited_by: string | null }>(
+          `/v1/workspaces/${workspaceId}/members`,
+          { method: "POST", body: JSON.stringify({ user_id: userId, role }) },
+          token
+        ),
+      remove: (workspaceId: string, userId: string, token: string) =>
+        request<void>(
+          `/v1/workspaces/${workspaceId}/members/${userId}`,
+          { method: "DELETE" },
+          token
+        ),
+    },
+  },
+  users: {
+    lookup: (email: string, token: string) =>
+      request<{ id: string; email: string }>(
+        `/v1/users/lookup?email=${encodeURIComponent(email)}`,
+        {},
+        token
+      ),
   },
   agents: {
     list: (workspaceId: string, token: string, statusFilter?: string) => {
@@ -292,6 +385,168 @@ export const api = {
         token
       ),
   },
+  mcpServers: {
+    list: (workspaceId: string, token: string) =>
+      request<MCPServerOut[]>(`/v1/workspaces/${workspaceId}/mcp-servers`, {}, token),
+    register: (
+      workspaceId: string,
+      body: { name: string; description?: string; url: string },
+      token: string
+    ) =>
+      request<MCPServerOut>(
+        `/v1/workspaces/${workspaceId}/mcp-servers`,
+        { method: "POST", body: JSON.stringify(body) },
+        token
+      ),
+    delete: (workspaceId: string, serverId: string, token: string) =>
+      request<void>(
+        `/v1/workspaces/${workspaceId}/mcp-servers/${serverId}`,
+        { method: "DELETE" },
+        token
+      ),
+    discover: (workspaceId: string, serverId: string, token: string) =>
+      request<ToolOut[]>(
+        `/v1/workspaces/${workspaceId}/mcp-servers/${serverId}/discover`,
+        { method: "POST" },
+        token
+      ),
+  },
+  tools: {
+    listWorkspaceTools: (workspaceId: string, token: string) =>
+      request<ToolOut[]>(`/v1/workspaces/${workspaceId}/tools`, {}, token),
+    listAgentTools: (workspaceId: string, agentId: string, token: string) =>
+      request<ToolOut[]>(`/v1/workspaces/${workspaceId}/agents/${agentId}/tools`, {}, token),
+    grant: (workspaceId: string, agentId: string, toolId: string, token: string) =>
+      request<void>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/tools`,
+        { method: "POST", body: JSON.stringify({ tool_id: toolId }) },
+        token
+      ),
+    revoke: (workspaceId: string, agentId: string, toolId: string, token: string) =>
+      request<void>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/tools/${toolId}`,
+        { method: "DELETE" },
+        token
+      ),
+    invoke: (
+      workspaceId: string,
+      agentId: string,
+      toolId: string,
+      args: Record<string, unknown>,
+      token: string
+    ) =>
+      request<ToolInvocationOut>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/tools/${toolId}/invoke`,
+        { method: "POST", body: JSON.stringify({ arguments: args }) },
+        token
+      ),
+    recentInvocations: (workspaceId: string, token: string, limit = 50) =>
+      request<ToolInvocationOut[]>(
+        `/v1/workspaces/${workspaceId}/tool-invocations?limit=${limit}`,
+        {},
+        token
+      ),
+  },
+  vetting: {
+    submit: (workspaceId: string, agentId: string, token: string) =>
+      request<VettingRunOut>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/submit-for-review`,
+        { method: "POST" },
+        token
+      ),
+    listRuns: (workspaceId: string, agentId: string, token: string) =>
+      request<VettingRunOut[]>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/vetting-runs`,
+        {},
+        token
+      ),
+    getRun: (workspaceId: string, agentId: string, runId: string, token: string) =>
+      request<VettingRunOut>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/vetting-runs/${runId}`,
+        {},
+        token
+      ),
+    listFindings: (workspaceId: string, agentId: string, runId: string, token: string) =>
+      request<VettingFindingOut[]>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/vetting-runs/${runId}/findings`,
+        {},
+        token
+      ),
+    approve: (workspaceId: string, agentId: string, runId: string, note: string, token: string) =>
+      request<VettingRunOut>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/vetting-runs/${runId}/approve`,
+        { method: "POST", body: JSON.stringify({ note }) },
+        token
+      ),
+    reject: (workspaceId: string, agentId: string, runId: string, note: string, token: string) =>
+      request<VettingRunOut>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/vetting-runs/${runId}/reject`,
+        { method: "POST", body: JSON.stringify({ note }) },
+        token
+      ),
+  },
+};
+
+export type VettingRunOut = {
+  id: string;
+  agent_id: string;
+  workspace_id: string;
+  classification: string;
+  status: string;
+  outcome: string | null;
+  triggered_by: string;
+  approved_by: string | null;
+  approval_decision: string | null;
+  approval_note: string | null;
+  finding_summary: {
+    total?: number;
+    by_severity?: Record<string, number>;
+    by_type?: Record<string, number>;
+  };
+  started_at: string;
+  completed_at: string | null;
+};
+
+export type VettingFindingOut = {
+  id: string;
+  finding_type: string;
+  severity: string;
+  location: string;
+  matched_preview: string;
+  matched_full: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type MCPServerOut = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string;
+  url: string;
+  transport: string;
+  is_builtin: boolean;
+  status: string;
+};
+
+export type ToolOut = {
+  id: string;
+  mcp_server_id: string;
+  workspace_id: string;
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  status: string;
+};
+
+export type ToolInvocationOut = {
+  id: string;
+  tool_id: string | null;
+  agent_id: string | null;
+  outcome: string;
+  latency_ms: number;
+  output_preview: string;
+  error: string | null;
 };
 
 export type KBOut = {

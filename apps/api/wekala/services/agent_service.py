@@ -237,6 +237,10 @@ class AgentService:
                 fields["name"] = name
             if description is not None:
                 fields["description"] = description
+            # Phase 6: any edit invalidates the prior vetting decision.
+            # Approved → unvetted forces a fresh submit-for-review before publish.
+            if agent.vetting_status in ("approved", "ready_for_review", "rejected"):
+                fields["vetting_status"] = "unvetted"
             agent = await self._agents.update(agent, **fields)
             await self._audit.record(
                 action=Action.AGENT_UPDATE,
@@ -248,6 +252,11 @@ class AgentService:
                 metadata={"version": new_version_num},
             )
 
+        # Re-fetch fresh after savepoint exit — same MissingGreenlet pattern
+        # as publish/archive/rollback/transfer.
+        fresh = await self._agents.get(agent.id, agent.workspace_id)
+        if fresh is not None:
+            agent = fresh
         return agent
 
     # ------------------------------------------------------------------
@@ -264,10 +273,34 @@ class AgentService:
     ) -> Agent:
         """DRAFT / IN_REVIEW → PUBLISHED. O(1).
 
+        Phase 6 gate: agent.vetting_status must be 'approved' before publish.
+        Bypassing the gatekeeper is impossible from this code path.
+
         If bazaar_svc + background_tasks are provided, indexes the agent
         into Meilisearch as a fire-and-forget background task.
         """
         self._assert_transition(agent, AgentStatus.PUBLISHED)
+
+        # The vetting background task writes vetting_status from a *different*
+        # session, so the snapshot loaded by _get_agent may be stale. Query
+        # directly rather than `await db.refresh(agent)` — refresh detaches
+        # the object on some asyncpg paths and breaks downstream from_orm.
+        from sqlalchemy import select as _select
+
+        current_vetting = (
+            await self._db.execute(_select(Agent.vetting_status).where(Agent.id == agent.id))
+        ).scalar_one()
+
+        if current_vetting != "approved":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Agent vetting_status is {current_vetting!r}; only 'approved' agents "
+                    "may be published. Submit for review first."
+                ),
+            )
+        # Sync the cached value so from_orm sees the fresh state.
+        agent.vetting_status = current_vetting
 
         async with self._db.begin_nested():
             agent = await self._agents.update(agent, status=AgentStatus.PUBLISHED)
@@ -279,6 +312,13 @@ class AgentService:
                 resource_type=ResourceType.AGENT,
                 resource_id=agent.id,
             )
+
+        # Re-fetch fresh from DB so serializers don't trip over lazy-loaded
+        # attributes (the savepoint release can leave the object in a state
+        # where SQLAlchemy wants to re-fetch by PK on attribute access).
+        fresh = await self._agents.get(agent.id, agent.workspace_id)
+        if fresh is not None:
+            agent = fresh
 
         if bazaar_svc and background_tasks:
             background_tasks.add_task(bazaar_svc.index_agent, agent)
@@ -310,6 +350,12 @@ class AgentService:
                 resource_type=ResourceType.AGENT,
                 resource_id=agent.id,
             )
+
+        # See note in publish(): re-fetch after savepoint so AgentOut.from_orm
+        # doesn't trip a lazy load (MissingGreenlet) on response serialization.
+        fresh = await self._agents.get(agent.id, agent.workspace_id)
+        if fresh is not None:
+            agent = fresh
 
         if bazaar_svc and background_tasks:
             background_tasks.add_task(bazaar_svc.deindex_agent, agent.id)
@@ -354,6 +400,10 @@ class AgentService:
                 metadata={"rollback_from": version_num, "new_version": new_version_num},
             )
 
+        # Same re-fetch pattern as publish/archive — avoid MissingGreenlet on response.
+        fresh = await self._agents.get(agent.id, agent.workspace_id)
+        if fresh is not None:
+            agent = fresh
         return agent
 
     async def clone(self, *, agent: Agent, actor_id: uuid.UUID, workspace_id: uuid.UUID) -> Agent:
@@ -409,6 +459,11 @@ class AgentService:
                 resource_id=agent.id,
                 metadata={"from_owner": str(prev_owner), "to_owner": str(new_owner_id)},
             )
+
+        # Same re-fetch pattern as publish/archive — avoid MissingGreenlet on response.
+        fresh = await self._agents.get(agent.id, agent.workspace_id)
+        if fresh is not None:
+            agent = fresh
 
         return agent
 

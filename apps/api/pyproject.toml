@@ -28,6 +28,8 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "pytesseract>=0.3.13",
     "lxml>=5.3",
+    # Phase 5 — Tools, MCP & integrations
+    "jsonschema>=4.23",
 ]
 
 [dependency-groups]

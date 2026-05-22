@@ -43,9 +43,18 @@ class Settings(BaseSettings):
     document_chunk_overlap: int = 128
     supabase_storage_url: str = "http://supabase-storage:5000"
 
+    # Tools / MCP (Phase 5)
+    # Comma-separated hostnames that bypass the SSRF guard. Used for trusted
+    # Docker-network sidecars (wekala-mcp-*) registered as built-in tools.
+    mcp_builtin_hostnames: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.wekala_cors_origins.split(",")]
+
+    @property
+    def mcp_builtin_hostname_set(self) -> frozenset[str]:
+        return frozenset(h.strip() for h in self.mcp_builtin_hostnames.split(",") if h.strip())
 
 
 settings = Settings()  # type: ignore[call-arg]

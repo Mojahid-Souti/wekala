@@ -3,13 +3,15 @@ import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 export function LoginForm() {
   const t = useTranslations("auth.login");
   const te = useTranslations("auth.errors");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const expired = searchParams.get("expired") === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -34,6 +36,11 @@ export function LoginForm() {
   return (
     <div className="rounded-lg border bg-white p-8 shadow-sm">
       <h1 className="text-2xl font-semibold mb-6">{t("title")}</h1>
+      {expired && !error && (
+        <output className="mb-4 block rounded bg-amber-50 px-3 py-2 text-sm text-amber-800 border border-amber-200">
+          Your session expired. Please sign in again.
+        </output>
+      )}
       {error && (
         <div
           role="alert"

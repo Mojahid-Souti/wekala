@@ -46,13 +46,42 @@ min_role := {
   "document.upload":   "builder",
   "document.view":     "viewer",
   "document.delete":   "builder",
+  # Tools, MCP & integrations (Phase 5)
+  "mcp_server.register": "admin",
+  "mcp_server.delete":   "admin",
+  "mcp_server.discover": "admin",
+  "tool.view":           "viewer",
+  "tool.grant":          "builder",
+  "tool.revoke":         "builder",
+  "tool.invoke":         "builder",
+  # Security Gatekeeper & PDPL (Phase 6)
+  "agent.submit_review": "builder",
+  "agent.approve":       "reviewer",
+  "agent.reject":        "reviewer",
+}
+
+# Actions where rank-based gating is wrong because the roles are intentionally
+# *parallel* (separation of duties), not hierarchical. A BUILDER has rank > REVIEWER
+# but must NOT be allowed to approve their own agent's vetting run.
+# These actions are gated on explicit role membership instead.
+explicit_role_set := {
+  "agent.approve": {"reviewer", "admin"},
+  "agent.reject":  {"reviewer", "admin"},
 }
 
 # default deny
 default allow := false
 
-# allow when the caller's role rank >= the required role rank for the action
+# allow when the caller's role rank >= the required role rank for the action,
+# AND the action is not in the explicit-role list (those use the rule below).
 allow {
   required := min_role[input.action]
+  not explicit_role_set[input.action]
   role_rank[input.role] >= role_rank[required]
+}
+
+# allow when the caller's role is explicitly in the allowed set for the action
+allow {
+  allowed := explicit_role_set[input.action]
+  input.role == allowed[_]
 }

@@ -146,3 +146,51 @@ Format:
   - OCR (pytesseract) path works for image PDFs but requires `tesseract-ocr` installed in the API container. Add to Dockerfile in a follow-up.
   - Presidio PII scan flags metadata only in Phase 4; enforcement (block uploads) deferred to Phase 6.
 - ADRs added: —
+
+## Phase 5 — Tools, MCP & integrations (core slice)
+
+- Started: 2026-05-21
+- Completed: 2026-05-21
+- Tag: (none — slice, not full phase; see Outstanding)
+- Notes:
+  - SSRF guard with 18 unit tests covering loopback, link-local, private (10/172/192.168), cloud-metadata (169.254.169.254, 100.100.100.200, fd00:ec2::254), multicast, reserved, IPv6 loopback, and an allowlist bypass for trusted Docker-network sidecars.
+  - `AgentScanner`/`HTTPMCPClient` adapter pair (Rule 5) using JSON-RPC 2.0 — pluggable for stdio transport later.
+  - Built-in MCP sidecar `wekala-mcp-time` (FastAPI, 128 MB) demonstrates the end-to-end registration/discovery/invocation path. Auto-flagged `is_builtin=true` by hostname allowlist match.
+  - Per-agent tool whitelist via `agent_tools` join table; runtime invocation gated by both whitelist and tool JSON Schema (Draft 2020-12).
+  - DNS-rebind mitigation: URL revalidated on every invocation, not just registration.
+  - 4 new tables + RLS in migration 0015. 7 new OPA actions.
+  - Frontend: workspace sidebar item "Tools"; MCP admin page (register/discover/delete); per-agent grant/revoke page.
+- Outstanding:
+  - Three other built-in MCPs from CLAUDE.md (filesystem-readonly, http-fetch, postgres-readonly).
+  - n8n workflow as a callable tool type.
+  - HTTP/webhook tool builder UI.
+  - `mcp_servers.allowed_hosts` field defined but not enforced (will land with http-fetch built-in).
+  - Frontend invocation playground (admins can curl).
+  - Sandbox quota integration (tool invocations against per-user daily quota from Phase 2).
+- ADRs added: —
+
+## Phase 6 — Security Gatekeeper & PDPL (core slice)
+
+- Started: 2026-05-21
+- Completed: 2026-05-22
+- Tag: phase-6-complete
+- Notes:
+  - Core slice: PII + injection scanners, vetting workflow, hard-block on critical findings, classification policy (YAML-driven), publish gating, re-vet on edit.
+  - **Hard-block on critical**: reviewer approval cannot override `critical` severity findings (PDPL posture protection). Configurable via `infra/policies/classification.yaml:hard_block_severity` (default `critical`).
+  - **Separation of duties enforced**: REVIEWER and BUILDER are intentionally *parallel* roles, not hierarchical. Rank-based `require_workspace_role(Role.REVIEWER)` was letting BUILDER through because BUILDER rank > REVIEWER rank. Fixed by adding (1) explicit role-set check `{REVIEWER, ADMIN}` at the endpoint layer, (2) `explicit_role_set` map in OPA policy, (3) submitter-cannot-approve-own-submission SoD check.
+  - Omani PII recognizers: national ID (8 digits + label context), mobile (+968 9X/7X), IBAN (`OM[0-9]{2}[A-Z]{4}[0-9]{16}`), vehicle plate. Recognizers below confidence 0.7 require a PII-label keyword nearby to suppress false positives.
+  - 7 injection rule patterns: instruction_override, role_override, system_leak, jailbreak_marker, privilege_escalation, delimiter_attack, encoded_payload.
+  - Background scanning via FastAPI BackgroundTasks; explicit `await db.commit()` before scheduling fixes a real race (BG task's fresh session opened before the request's outer transaction committed).
+  - Bug discovered + fixed mid-implementation: savepoint exit on `async with self._db.begin_nested()` puts the ORM object in a state where `from_orm` triggers a lazy load outside the async greenlet → `MissingGreenlet` → HTTP 500. Applied re-fetch pattern to publish/archive/rollback/transfer/update in agent_service.
+  - Frontend hot-reload bug found + fixed: `request()` was forcing `Content-Type: application/json` on `FormData` uploads, which clobbered the multipart boundary and caused 422s. Also: `[object Object]` toast bug — Pydantic validation `detail` is an array of `{loc,msg}` objects, now formatted into a readable string.
+  - 401 race in `agent` query fixed by adding `enabled: !!token` guard.
+  - Auto-fix agent deferred — too much new attack surface (LLM-rewriting attack surface, audit opacity); separate feature for after Phase 6.
+- Outstanding (§10 of `docs/phases/MANUAL_TEST_PHASE_6.md`):
+  - NeMo Guardrails runtime output safety at invocation time.
+  - Garak red-team corpus runner.
+  - Signed PDF compliance reports (JSON via API works today).
+  - Rebuff / Prompt-Guard via Ollama (rule-based scanner ships first).
+  - Per-workspace HMAC signing of approval decisions.
+  - Tools whitelist enforcement at publish time (`allowed_tools` patterns in YAML are loaded but not yet enforced against agent's granted tools).
+  - Phase 2 PATCH bug discovered: `update()` sets `dify_dsl={}` if not provided, wiping the prompt. Tracked as Phase 2 follow-up.
+- ADRs added: — (separation-of-duties design intent worth an ADR follow-up)

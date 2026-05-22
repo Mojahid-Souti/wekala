@@ -4,11 +4,13 @@ export const dynamic = "force-dynamic";
 
 import { AgentStatusBadge } from "@/components/agent/agent-status-badge";
 import { VersionList } from "@/components/agent/version-list";
+import { VettingStatusBadge } from "@/components/vetting/vetting-status-badge";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
 import { useToken } from "@/lib/use-token";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 
@@ -28,12 +30,13 @@ export default function AgentDetailPage({ params }: Props) {
   const { data: agent, isLoading } = useQuery({
     queryKey: ["agent", workspaceId, agentId],
     queryFn: () => api.agents.get(workspaceId, agentId, token),
+    enabled: !!token,
   });
 
   const { data: versions } = useQuery({
     queryKey: ["agent-versions", workspaceId, agentId],
     queryFn: () => api.agents.versions(workspaceId, agentId, token),
-    enabled: !!agent,
+    enabled: !!token && !!agent,
   });
 
   const publishMutation = useMutation({
@@ -89,6 +92,7 @@ export default function AgentDetailPage({ params }: Props) {
           {agent.description && <p className="mt-1 text-sm text-gray-500">{agent.description}</p>}
           <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
             <AgentStatusBadge status={agent.status} />
+            <VettingStatusBadge status={agent.vetting_status} />
             <span>
               {t("version")} {agent.version}
             </span>
@@ -97,16 +101,23 @@ export default function AgentDetailPage({ params }: Props) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {(agent.status === "draft" || agent.status === "in_review") && (
-            <button
-              type="button"
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              {t("publishButton")}
-            </button>
-          )}
+          <Link
+            href={ROUTES.agentVetting(workspaceId, agentId)}
+            className="rounded-md border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Review &amp; vet
+          </Link>
+          {(agent.status === "draft" || agent.status === "in_review") &&
+            agent.vetting_status === "approved" && (
+              <button
+                type="button"
+                onClick={() => publishMutation.mutate()}
+                disabled={publishMutation.isPending}
+                className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {t("publishButton")}
+              </button>
+            )}
           {agent.status !== "archived" && (
             <button
               type="button"

@@ -42,6 +42,7 @@ class Workspace(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("auth.users.id", ondelete="RESTRICT"),
@@ -163,6 +164,8 @@ class Agent(Base):
     language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     classification: Mapped[str] = mapped_column(String(20), nullable=False, default="internal")
     dify_app_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Phase 6 — safety review state, independent of lifecycle `status`.
+    vetting_status: Mapped[str] = mapped_column(String(30), nullable=False, default="unvetted")
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now(), onupdate=func.now()
@@ -384,5 +387,217 @@ class KBChunk(Base):
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_metadata: Mapped[dict] = mapped_column(  # type: ignore[type-arg]
         "metadata", JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+# =============================================================================
+# Phase 5 — Tools, MCP & integrations
+# =============================================================================
+
+
+class MCPServer(Base):
+    """A Model Context Protocol server registered by a workspace admin.
+
+    Built-ins are flagged `is_builtin=True` and bypass the SSRF check during
+    registration (their URLs point at trusted Docker-network sidecars).
+    """
+
+    __tablename__ = "mcp_servers"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_mcp_server_workspace_name"),
+        CheckConstraint("char_length(name) BETWEEN 2 AND 100", name="mcp_server_name_length"),
+        CheckConstraint("transport IN ('http')", name="mcp_server_transport"),
+        CheckConstraint("status IN ('active','disabled')", name="mcp_server_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    transport: Mapped[str] = mapped_column(String(20), nullable=False, default="http")
+    is_builtin: Mapped[bool] = mapped_column(nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Tool(Base):
+    """A tool exposed by an MCP server. Discovered via the server's tools/list call.
+
+    `mcp_server_id` is NOT NULL — every tool belongs to an MCP server. The
+    `tools/list` response is cached here; re-discovery overwrites the row.
+    """
+
+    __tablename__ = "tools"
+    __table_args__ = (
+        UniqueConstraint("mcp_server_id", "name", name="uq_tool_server_name"),
+        CheckConstraint("char_length(name) BETWEEN 1 AND 200", name="tool_name_length"),
+        CheckConstraint("status IN ('active','disabled')", name="tool_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mcp_server_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("mcp_servers.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    input_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)  # type: ignore[type-arg]
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AgentTool(Base):
+    """Per-agent tool whitelist. Composite PK (agent_id, tool_id)."""
+
+    __tablename__ = "agent_tools"
+
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tools.id", ondelete="CASCADE"), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    granted_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    granted_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class ToolInvocation(Base):
+    """Audit row for every tool/call. Workspace-scoped via FK + RLS."""
+
+    __tablename__ = "tool_invocations"
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('success','failure','timeout')", name="tool_invocation_outcome"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+    tool_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tools.id", ondelete="SET NULL"), nullable=True
+    )
+    caller_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=True
+    )
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_preview: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    output_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    output_preview: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+# =============================================================================
+# Phase 6 — Security Gatekeeper & PDPL
+# =============================================================================
+
+
+class VettingRun(Base):
+    """One safety review of an agent. Fail-closed: status starts at 'scanning'
+    and only completes when every scanner returns or errors. UI polls this row.
+    """
+
+    __tablename__ = "vetting_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('scanning','completed','failed')", name="vetting_run_valid_status"
+        ),
+        CheckConstraint(
+            "outcome IS NULL OR outcome IN ('ready_for_review','auto_approved','rejected','error')",
+            name="vetting_run_valid_outcome",
+        ),
+        CheckConstraint(
+            "approval_decision IS NULL OR approval_decision IN ('approved','rejected')",
+            name="vetting_run_valid_approval",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="scanning")
+    outcome: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    classification: Mapped[str] = mapped_column(String(20), nullable=False)
+    triggered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=True
+    )
+    approval_decision: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    approval_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    finding_summary: Mapped[dict] = mapped_column(  # type: ignore[type-arg]
+        JSONB, nullable=False, default=dict
+    )
+    started_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class VettingFinding(Base):
+    """A single issue detected by a scanner during one VettingRun.
+
+    `matched_full` holds the unredacted matched text; only workspace admins
+    can read it (enforced at the service/API layer — RLS allows row access).
+    `matched_preview` is a safe-to-display redacted version.
+    """
+
+    __tablename__ = "vetting_findings"
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('info','low','medium','high','critical')",
+            name="vetting_finding_valid_severity",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    vetting_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vetting_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    finding_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    location: Mapped[str] = mapped_column(String(50), nullable=False)
+    matched_preview: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    matched_full: Mapped[str | None] = mapped_column(Text, nullable=True)
+    finding_metadata: Mapped[dict] = mapped_column(  # type: ignore[type-arg]
+        "finding_metadata", JSONB, nullable=False, default=dict
     )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

@@ -22,6 +22,7 @@ ROLE_RANK: dict[Role, int] = {
 class Action(StrEnum):
     WORKSPACE_VIEW = "workspace.view"
     WORKSPACE_UPDATE = "workspace.update"
+    WORKSPACE_DELETE = "workspace.delete"
     WORKSPACE_INVITE = "workspace.invite"
     MEMBERSHIP_UPDATE = "membership.update"
     API_KEY_MANAGE = "api_key.manage"
@@ -49,6 +50,20 @@ class Action(StrEnum):
     DOCUMENT_VIEW = "document.view"
     DOCUMENT_DELETE = "document.delete"
     KB_SEARCH = "kb.search"
+    # Tools, MCP & integrations (Phase 5)
+    MCP_SERVER_REGISTER = "mcp_server.register"
+    MCP_SERVER_DELETE = "mcp_server.delete"
+    MCP_SERVER_DISCOVER = "mcp_server.discover"
+    TOOL_VIEW = "tool.view"
+    TOOL_GRANT = "tool.grant"
+    TOOL_REVOKE = "tool.revoke"
+    TOOL_INVOKE = "tool.invoke"
+    # Security Gatekeeper & PDPL (Phase 6)
+    AGENT_SUBMIT_REVIEW = "agent.submit_review"
+    AGENT_VET_START = "agent.vet_start"
+    AGENT_VET_COMPLETE = "agent.vet_complete"
+    AGENT_APPROVE = "agent.approve"
+    AGENT_REJECT = "agent.reject"
 
 
 class ResourceType(StrEnum):
@@ -63,6 +78,13 @@ class ResourceType(StrEnum):
     # Phase 4
     KB = "knowledge_base"
     DOCUMENT = "document"
+    # Phase 5
+    MCP_SERVER = "mcp_server"
+    TOOL = "tool"
+    TOOL_INVOCATION = "tool_invocation"
+    # Phase 6
+    VETTING_RUN = "vetting_run"
+    VETTING_FINDING = "vetting_finding"
 
 
 class Outcome(StrEnum):

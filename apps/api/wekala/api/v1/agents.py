@@ -85,6 +85,7 @@ class AgentOut(BaseModel):
     version: int
     language: str
     classification: str
+    vetting_status: str
     dify_app_id: str | None
     created_at: str
     updated_at: str
@@ -102,6 +103,7 @@ class AgentOut(BaseModel):
             version=a.version,
             language=a.language,
             classification=a.classification,
+            vetting_status=a.vetting_status,
             dify_app_id=a.dify_app_id,
             created_at=a.created_at.isoformat(),
             updated_at=a.updated_at.isoformat(),

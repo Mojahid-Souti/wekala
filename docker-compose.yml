@@ -807,6 +807,12 @@ services:
       DOCUMENT_CHUNK_TOKENS: "1024"
       DOCUMENT_CHUNK_OVERLAP: "128"
       SUPABASE_STORAGE_URL: http://supabase-storage:5000
+      # Phase 5 — Tools & MCP
+      MCP_BUILTIN_HOSTNAMES: ${MCP_BUILTIN_HOSTNAMES:-wekala-mcp-time}
+      # Phase 6 — Gatekeeper
+      WEKALA_CLASSIFICATION_POLICY_PATH: /policies/classification.yaml
+    volumes:
+      - ./infra/policies:/policies:ro
     ports:
       - "8001:8001"
     networks:
@@ -839,10 +845,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8001
-        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      target: dev
     container_name: wekala-web
     restart: unless-stopped
     environment:
@@ -851,6 +854,13 @@ services:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       HOSTNAME: "0.0.0.0"
       PORT: "3002"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      # Bind-mount source for hot-reload; anonymous volumes shadow node_modules and .next
+      # so the container's copies are preserved (host doesn't have them).
+      - ./apps/web:/app/apps/web
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
     ports:
       - "3002:3002"
     networks:
@@ -863,11 +873,36 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 90s
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g
+
+  # ===========================================================================
+  # Built-in MCP servers (Phase 5)
+  # Internal only — wekala-api invokes them via the registered MCP URL.
+  # Hostnames listed in MCP_BUILTIN_HOSTNAMES bypass the SSRF check.
+  # ===========================================================================
+
+  wekala-mcp-time:
+    build:
+      context: ./packages/mcp-servers/time
+      dockerfile: Dockerfile
+    container_name: wekala-mcp-time
+    restart: unless-stopped
+    networks:
+      - wekala_net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://localhost:3334/health\",timeout=3).status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
   # ===========================================================================
   # OPA — Open Policy Agent sidecar (Phase 1: RBAC authorization)

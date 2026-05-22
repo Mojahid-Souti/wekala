@@ -6,13 +6,22 @@ export const ROUTES = {
   resetPassword: "/reset-password",
   dashboard: "/dashboard",
   newWorkspace: "/workspaces/new",
+  workspace: (workspaceId: string) => `/workspaces/${workspaceId}`,
+  workspaceMembers: (workspaceId: string) => `/workspaces/${workspaceId}/members`,
   agents: (workspaceId: string) => `/workspaces/${workspaceId}/agents`,
   newAgent: (workspaceId: string) => `/workspaces/${workspaceId}/agents/new`,
   agentDetail: (workspaceId: string, agentId: string) =>
     `/workspaces/${workspaceId}/agents/${agentId}`,
+  agentVetting: (workspaceId: string, agentId: string) =>
+    `/workspaces/${workspaceId}/agents/${agentId}/vetting`,
   bazaar: "/bazaar",
   bazaarAgent: (agentId: string) => `/bazaar/${agentId}`,
   hired: "/bazaar/hired",
+  workspaceSettings: (workspaceId: string) => `/workspaces/${workspaceId}/settings`,
+  tools: (workspaceId: string) => `/workspaces/${workspaceId}/tools`,
+  mcpServers: (workspaceId: string) => `/workspaces/${workspaceId}/tools/mcp-servers`,
+  agentTools: (workspaceId: string, agentId: string) =>
+    `/workspaces/${workspaceId}/agents/${agentId}/tools`,
   knowledgeBase: (workspaceId: string) => `/workspaces/${workspaceId}/knowledge-base`,
   kbUpload: (workspaceId: string, kbId: string) =>
     `/workspaces/${workspaceId}/knowledge-base/${kbId}/upload`,

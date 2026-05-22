@@ -27,6 +27,18 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 RUN pnpm --filter wekala-web build
 
+FROM base AS dev
+WORKDIR /app
+# Pre-install node_modules from deps stage so anonymous volumes can shadow them
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY package.json pnpm-workspace.yaml ./
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=development
+EXPOSE 3002
+WORKDIR /app/apps/web
+CMD ["node_modules/.bin/next", "dev", "--port", "3002", "--hostname", "0.0.0.0"]
+
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production

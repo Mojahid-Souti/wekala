@@ -24,12 +24,25 @@ class WorkspaceService:
         self._memberships = MembershipRepository(db)
         self._audit = AuditRepository(db)
 
-    async def create(self, name: str, owner_id: uuid.UUID) -> Workspace:
+    async def create(self, name: str, owner_id: uuid.UUID, description: str = "") -> Workspace:
         """Create workspace and make owner an Admin member. O(1) writes."""
+        if await self._workspaces.name_exists_for_user(owner_id, name):
+            from fastapi import HTTPException, status
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"You already have a workspace named '{name.strip()}'. "
+                    "Choose a different name."
+                ),
+            )
+
         slug = await self._unique_slug(_slugify(name))
 
         async with self._db.begin_nested():
-            ws = await self._workspaces.create(name=name, slug=slug, owner_id=owner_id)
+            ws = await self._workspaces.create(
+                name=name, slug=slug, owner_id=owner_id, description=description
+            )
             await self._memberships.create(workspace_id=ws.id, user_id=owner_id, role=Role.ADMIN)
             await self._audit.record(
                 action=Action.WORKSPACE_UPDATE,
@@ -41,6 +54,68 @@ class WorkspaceService:
             )
 
         return ws
+
+    async def update(
+        self, workspace_id: uuid.UUID, actor_id: uuid.UUID, name: str, description: str
+    ) -> Workspace:
+        """Update name and description. Re-slugifies on name change. O(1)."""
+        from fastapi import HTTPException, status
+
+        ws = await self._workspaces.get(workspace_id)
+        if not ws:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+        name_changed = ws.name.lower().strip() != name.lower().strip()
+        if name_changed and await self._workspaces.name_exists_for_user(
+            actor_id, name, exclude_id=workspace_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"You already have a workspace named '{name.strip()}'. "
+                    "Choose a different name."
+                ),
+            )
+
+        new_slug = ws.slug if not name_changed else await self._unique_slug(_slugify(name))
+
+        async with self._db.begin_nested():
+            ws = await self._workspaces.update(
+                ws, name=name, slug=new_slug, description=description
+            )
+            await self._audit.record(
+                action=Action.WORKSPACE_UPDATE,
+                outcome=Outcome.SUCCESS,
+                actor_user_id=actor_id,
+                actor_workspace_id=workspace_id,
+                resource_type=ResourceType.WORKSPACE,
+                resource_id=workspace_id,
+            )
+        return ws
+
+    async def delete(self, workspace_id: uuid.UUID, actor_id: uuid.UUID) -> None:
+        """Delete workspace; DB CASCADE removes memberships, agents, KBs. O(1)."""
+        from fastapi import HTTPException, status
+
+        ws = await self._workspaces.get(workspace_id)
+        if not ws:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        if ws.owner_id != actor_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the workspace owner can delete it",
+            )
+
+        async with self._db.begin_nested():
+            await self._audit.record(
+                action=Action.WORKSPACE_DELETE,
+                outcome=Outcome.SUCCESS,
+                actor_user_id=actor_id,
+                actor_workspace_id=workspace_id,
+                resource_type=ResourceType.WORKSPACE,
+                resource_id=workspace_id,
+            )
+            await self._workspaces.delete(ws)
 
     async def invite(
         self,

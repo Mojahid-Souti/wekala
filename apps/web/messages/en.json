@@ -53,10 +53,16 @@
     },
     "create": {
       "title": "Create a workspace",
+      "subtitle": "Set up a workspace for your team to build and manage agents.",
       "nameLabel": "Workspace name",
       "namePlaceholder": "e.g. Customer Success",
-      "submitButton": "Create",
-      "cancelButton": "Cancel"
+      "nameHint": "Between 2 and 100 characters.",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "What will this workspace be used for?",
+      "submitButton": "Create workspace",
+      "creating": "Creating…",
+      "cancelButton": "Cancel",
+      "successMessage": "Workspace \"{name}\" created successfully."
     }
   },
   "nav": {

@@ -191,7 +191,7 @@ format: ## Auto-fix formatting (Python + TypeScript)
 ##@ Testing
 
 .PHONY: test
-test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-phase-4 test-py test-ts ## Run all tests
+test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-phase-4 test-phase-5 test-phase-6 test-py test-ts ## Run all tests
 
 .PHONY: test-phase-0
 test-phase-0: ## Run Phase 0 automated integration tests (requires running stack)
@@ -305,6 +305,65 @@ test-phase-4: ## Verify Phase 4 required files are present and unit tests pass
 	@echo ""
 	@echo "$(BOLD)Phase 4 unit tests:$(RESET)"
 	@cd apps/api && uv run pytest tests/test_kb.py -v
+
+.PHONY: test-phase-5
+test-phase-5: ## Verify Phase 5 required files are present and unit tests pass
+	@echo "$(BOLD)Phase 5 file validation:$(RESET)"
+	@missing=0; \
+	files=( \
+	  "apps/api/wekala/core/security/ssrf_guard.py" \
+	  "apps/api/wekala/adapters/mcp/base.py" \
+	  "apps/api/wekala/adapters/mcp/http_client.py" \
+	  "apps/api/wekala/db/repositories/mcp_server.py" \
+	  "apps/api/wekala/services/tool_service.py" \
+	  "apps/api/wekala/api/v1/tools.py" \
+	  "apps/api/alembic/versions/0015_tools_and_mcp.py" \
+	  "apps/api/tests/test_ssrf_guard.py" \
+	  "packages/mcp-servers/time/main.py" \
+	  "packages/mcp-servers/time/Dockerfile" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/tools/page.tsx" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/tools/mcp-servers/page.tsx" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/agents/[agentId]/tools/page.tsx" \
+	  "docs/phases/MANUAL_TEST_PHASE_5.md" \
+	); \
+	for f in "$${files[@]}"; do \
+	  if [ ! -f "$$f" ]; then echo "  MISSING: $$f"; missing=$$((missing+1)); \
+	  else echo "  $(GREEN)✓$(RESET) $$f"; fi; \
+	done; \
+	[ "$$missing" -eq 0 ] && echo "$(GREEN)All Phase 5 files present.$(RESET)" || { echo "$(BOLD)$$missing file(s) missing.$(RESET)"; exit 1; }
+	@echo ""
+	@echo "$(BOLD)Phase 5 unit tests:$(RESET)"
+	@cd apps/api && uv run pytest tests/test_ssrf_guard.py -v
+
+.PHONY: test-phase-6
+test-phase-6: ## Verify Phase 6 required files are present and unit tests pass
+	@echo "$(BOLD)Phase 6 file validation:$(RESET)"
+	@missing=0; \
+	files=( \
+	  "apps/api/wekala/adapters/scanner/base.py" \
+	  "apps/api/wekala/adapters/scanner/pii.py" \
+	  "apps/api/wekala/adapters/scanner/prompt_injection.py" \
+	  "apps/api/wekala/adapters/scanner/recognizers/oman.py" \
+	  "apps/api/wekala/core/policies/classification_policy.py" \
+	  "apps/api/wekala/db/repositories/vetting.py" \
+	  "apps/api/wekala/services/vetting_service.py" \
+	  "apps/api/wekala/api/v1/vetting.py" \
+	  "apps/api/alembic/versions/0016_vetting.py" \
+	  "apps/api/tests/test_pii_scanner.py" \
+	  "apps/api/tests/test_injection_scanner.py" \
+	  "infra/policies/classification.yaml" \
+	  "apps/web/components/vetting/vetting-status-badge.tsx" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/agents/[agentId]/vetting/page.tsx" \
+	  "docs/phases/MANUAL_TEST_PHASE_6.md" \
+	); \
+	for f in "$${files[@]}"; do \
+	  if [ ! -f "$$f" ]; then echo "  MISSING: $$f"; missing=$$((missing+1)); \
+	  else echo "  $(GREEN)✓$(RESET) $$f"; fi; \
+	done; \
+	[ "$$missing" -eq 0 ] && echo "$(GREEN)All Phase 6 files present.$(RESET)" || { echo "$(BOLD)$$missing file(s) missing.$(RESET)"; exit 1; }
+	@echo ""
+	@echo "$(BOLD)Phase 6 unit tests:$(RESET)"
+	@cd apps/api && uv run pytest tests/test_pii_scanner.py tests/test_injection_scanner.py -v
 
 .PHONY: test-py
 test-py: ## Run Python unit tests with pytest

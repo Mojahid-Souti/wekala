@@ -25,6 +25,12 @@ router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 class CreateWorkspaceRequest(BaseModel):
     name: str
+    description: str = ""
+
+
+class UpdateWorkspaceRequest(BaseModel):
+    name: str
+    description: str = ""
 
 
 class InviteMemberRequest(BaseModel):
@@ -44,11 +50,18 @@ class WorkspaceOut(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+    description: str
     owner_id: uuid.UUID
 
     @classmethod
     def from_model(cls, ws: Workspace) -> "WorkspaceOut":
-        return cls(id=ws.id, name=ws.name, slug=ws.slug, owner_id=ws.owner_id)
+        return cls(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            description=ws.description,
+            owner_id=ws.owner_id,
+        )
 
 
 class MemberOut(BaseModel):
@@ -90,7 +103,7 @@ async def create_workspace(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceOut:
     svc = WorkspaceService(db)
-    ws = await svc.create(name=body.name, owner_id=current_user.id)
+    ws = await svc.create(name=body.name, owner_id=current_user.id, description=body.description)
     return WorkspaceOut.from_model(ws)
 
 
@@ -115,6 +128,30 @@ async def get_workspace(
     if not ws:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
     return WorkspaceOut.from_model(ws)
+
+
+@router.put("/{workspace_id}", response_model=WorkspaceOut)
+async def update_workspace(
+    workspace_id: uuid.UUID,
+    body: UpdateWorkspaceRequest,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.ADMIN))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> WorkspaceOut:
+    current_user, _ = caller
+    svc = WorkspaceService(db)
+    ws = await svc.update(workspace_id, current_user.id, body.name, body.description)
+    return WorkspaceOut.from_model(ws)
+
+
+@router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_workspace(
+    workspace_id: uuid.UUID,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.ADMIN))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    current_user, _ = caller
+    svc = WorkspaceService(db)
+    await svc.delete(workspace_id, current_user.id)
 
 
 @router.post("/{workspace_id}/members", response_model=MemberOut, status_code=201)
