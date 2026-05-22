@@ -32,8 +32,7 @@ class WorkspaceService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"You already have a workspace named '{name.strip()}'. "
-                    "Choose a different name."
+                    f"You already have a workspace named '{name.strip()}'. Choose a different name."
                 ),
             )
 
@@ -72,8 +71,7 @@ class WorkspaceService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"You already have a workspace named '{name.strip()}'. "
-                    "Choose a different name."
+                    f"You already have a workspace named '{name.strip()}'. Choose a different name."
                 ),
             )
 
