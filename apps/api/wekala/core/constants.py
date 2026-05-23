@@ -64,6 +64,12 @@ class Action(StrEnum):
     AGENT_VET_COMPLETE = "agent.vet_complete"
     AGENT_APPROVE = "agent.approve"
     AGENT_REJECT = "agent.reject"
+    # Developer SDK & API (Phase 7)
+    PUBLIC_INVOKE = "public.invoke"
+    PUBLIC_STREAM = "public.stream"
+    WEBHOOK_CREATE = "webhook.create"
+    WEBHOOK_DELETE = "webhook.delete"
+    WEBHOOK_VIEW = "webhook.view"
 
 
 class ResourceType(StrEnum):
@@ -85,6 +91,10 @@ class ResourceType(StrEnum):
     # Phase 6
     VETTING_RUN = "vetting_run"
     VETTING_FINDING = "vetting_finding"
+    # Phase 7
+    WEBHOOK_SUBSCRIPTION = "webhook_subscription"
+    WEBHOOK_DELIVERY = "webhook_delivery"
+    API_REQUEST = "api_request"
 
 
 class Outcome(StrEnum):

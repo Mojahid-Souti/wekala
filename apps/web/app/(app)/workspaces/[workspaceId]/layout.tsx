@@ -15,6 +15,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     { label: "Tools", href: ROUTES.tools(workspaceId) },
     { label: "Members", href: ROUTES.workspaceMembers(workspaceId) },
     { label: "Settings", href: ROUTES.workspaceSettings(workspaceId) },
+    { label: "Developer", href: ROUTES.workspaceDeveloper(workspaceId) },
   ];
 
   return (

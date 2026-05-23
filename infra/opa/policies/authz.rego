@@ -58,6 +58,12 @@ min_role := {
   "agent.submit_review": "builder",
   "agent.approve":       "reviewer",
   "agent.reject":        "reviewer",
+  # Developer SDK & API (Phase 7)
+  "webhook.create":      "admin",
+  "webhook.delete":      "admin",
+  "webhook.view":        "viewer",
+  "public.invoke":       "viewer",
+  "public.stream":       "viewer",
 }
 
 # Actions where rank-based gating is wrong because the roles are intentionally

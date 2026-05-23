@@ -194,3 +194,31 @@ Format:
   - Tools whitelist enforcement at publish time (`allowed_tools` patterns in YAML are loaded but not yet enforced against agent's granted tools).
   - Phase 2 PATCH bug discovered: `update()` sets `dify_dsl={}` if not provided, wiping the prompt. Tracked as Phase 2 follow-up.
 - ADRs added: — (separation-of-duties design intent worth an ADR follow-up)
+
+## Phase 7 — Developer SDK & API (core slice)
+
+- Started: 2026-05-23
+- Completed: 2026-05-23
+- Tag: phase-7-complete
+- Notes:
+  - Core slice: Bearer API-key auth for `/v1/agents/{id}/invoke`, sliding-window rate limiting, signed webhook subscriptions with retrying delivery worker, filtered public OpenAPI spec, minimal Python SDK.
+  - **Bearer auth via `Authorization: Bearer wk_...`** — Phase 1's ApiKey infra (Argon2id-hashed) reused. Lookup by 11-char prefix → constant-time verify. Generic 401 on any failure to avoid key enumeration.
+  - **Rate limiting in Postgres**, not Redis. `api_request_log` table with partial index `(api_key_id, ts DESC)` lets us count windowed requests in one SUM-of-FILTER query. Defaults: 60/min, 10k/day.
+  - **Webhook delivery worker** runs as a long-running asyncio task started in FastAPI's `lifespan`. Scans `webhook_deliveries WHERE status='pending' AND next_attempt_at <= now()` and retries with exponential backoff (1s, 5s, 25s, 125s, 625s) up to 5 attempts before marking `dead`. URL re-validated via Phase 5's SSRF guard on every attempt (DNS-rebind mitigation).
+  - **HMAC signing** via `sha256=<hex>` in `X-Wekala-Signature`. Receivers verify with the SAME secret they were given at creation time. Signing secret is **plaintext at rest** (standard industry practice — GitHub/Stripe/Slack do the same; HMAC requires symmetric key on both sides). Tracked: encrypt-at-rest with an app-level key.
+  - **Publish + vetting gate enforced on the public endpoint** — only `status='published' AND vetting_status='approved'` agents are externally callable. 409 with explanatory detail otherwise.
+  - **Public OpenAPI** at `/v1/openapi.json` is filtered to only `tags=["public","webhooks"]` operations. Internal routes do not leak via the public spec.
+  - **Python SDK shipped** at `packages/sdk-py/` — `WekalaClient.invoke_agent`, async `stream_agent`, and `verify_webhook_signature` helper. Hand-written (not generator-output) for now to keep the surface small; openapi-generator-cli wiring is a follow-on.
+  - **Frontend**: new **Developer** tab in the workspace sidebar (under Settings) with API-keys section + webhooks section. Both show full secret ONCE on creation in an amber "save now" banner.
+  - 8 unit tests for HMAC signing, verification (including timing-safe + tamper-rejection), and backoff progression.
+- Outstanding:
+  - **SSE streaming server-side** — SDK client method exists but `/v1/agents/{id}/stream` endpoint is a follow-on.
+  - **Webhook secret encryption-at-rest** — store via Postgres TDE or app-level Fernet.
+  - **TypeScript SDK** — needs openapi-generator-cli setup.
+  - **Docusaurus docs portal** — currently shipping with one README.
+  - **Token-cost quotas** — needs Phase 8 cost tracking.
+  - **Idempotency-Key header support** for client-side retry dedup.
+  - **Per-workspace CORS allow-list** — currently server-to-server only.
+  - **Worker dead-letter UI** — `webhook_deliveries.status='dead'` rows have no surface yet.
+  - **Phase 2 PATCH bug** still present: `update()` wipes `dify_dsl` if not provided.
+- ADRs added: —

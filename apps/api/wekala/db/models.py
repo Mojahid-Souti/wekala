@@ -13,7 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -600,4 +600,99 @@ class VettingFinding(Base):
     finding_metadata: Mapped[dict] = mapped_column(  # type: ignore[type-arg]
         "finding_metadata", JSONB, nullable=False, default=dict
     )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+# =============================================================================
+# Phase 7 — Developer SDK & API
+# =============================================================================
+
+
+class ApiRequestLog(Base):
+    """Every external (API-key-authenticated) request. Source for rate limiting + analytics."""
+
+    __tablename__ = "api_request_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    api_key_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("api_keys.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    status_code: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ts: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class WebhookSubscription(Base):
+    """Per-workspace event subscription. `secret_hash` is Argon2id of the HMAC secret
+    (shown once on creation, never again)."""
+
+    __tablename__ = "webhook_subscriptions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active','paused','disabled')", name="webhook_subscription_status"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    events: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+    # Plaintext HMAC signing secret (NOT hashed — we need to read it to
+    # sign payloads; receivers verify with the same bytes). Encrypt-at-rest
+    # via an app key is a follow-on.
+    signing_secret: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_prefix: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WebhookDelivery(Base):
+    """Durable per-event delivery state. Worker reads `status='pending'` rows
+    whose `next_attempt_at <= now()` and attempts HMAC-signed POST.
+    """
+
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','success','failed','dead')",
+            name="webhook_delivery_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("webhook_subscriptions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    event: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)  # type: ignore[type-arg]
+    delivery_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, unique=True, default=uuid.uuid4
+    )
+    attempt_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_status_code: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

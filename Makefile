@@ -191,7 +191,7 @@ format: ## Auto-fix formatting (Python + TypeScript)
 ##@ Testing
 
 .PHONY: test
-test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-phase-4 test-phase-5 test-phase-6 test-py test-ts ## Run all tests
+test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-phase-4 test-phase-5 test-phase-6 test-phase-7 test-py test-ts ## Run all tests
 
 .PHONY: test-phase-0
 test-phase-0: ## Run Phase 0 automated integration tests (requires running stack)
@@ -364,6 +364,39 @@ test-phase-6: ## Verify Phase 6 required files are present and unit tests pass
 	@echo ""
 	@echo "$(BOLD)Phase 6 unit tests:$(RESET)"
 	@cd apps/api && uv run pytest tests/test_pii_scanner.py tests/test_injection_scanner.py -v
+
+.PHONY: test-phase-7
+test-phase-7: ## Verify Phase 7 required files are present and unit tests pass
+	@echo "$(BOLD)Phase 7 file validation:$(RESET)"
+	@missing=0; \
+	files=( \
+	  "apps/api/wekala/adapters/auth/api_key.py" \
+	  "apps/api/wekala/services/rate_limit_service.py" \
+	  "apps/api/wekala/services/public_invocation_service.py" \
+	  "apps/api/wekala/services/webhook_service.py" \
+	  "apps/api/wekala/api/v1/public.py" \
+	  "apps/api/wekala/api/v1/webhooks.py" \
+	  "apps/api/alembic/versions/0017_public_api.py" \
+	  "apps/api/tests/test_webhook_sign.py" \
+	  "packages/sdk-py/wekala/__init__.py" \
+	  "packages/sdk-py/pyproject.toml" \
+	  "packages/sdk-py/README.md" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/settings/developer/page.tsx" \
+	  "docs/phases/MANUAL_TEST_PHASE_7.md" \
+	); \
+	for f in "$${files[@]}"; do \
+	  if [ ! -f "$$f" ]; then echo "  MISSING: $$f"; missing=$$((missing+1)); \
+	  else echo "  $(GREEN)✓$(RESET) $$f"; fi; \
+	done; \
+	[ "$$missing" -eq 0 ] && echo "$(GREEN)All Phase 7 files present.$(RESET)" || { echo "$(BOLD)$$missing file(s) missing.$(RESET)"; exit 1; }
+	@echo ""
+	@echo "$(BOLD)Phase 7 unit tests:$(RESET)"
+	@cd apps/api && uv run pytest tests/test_webhook_sign.py -v
+
+.PHONY: sdk-py
+sdk-py: ## Install the local Python SDK in editable mode
+	@cd packages/sdk-py && uv pip install -e .
+	@echo "  $(GREEN)✓$(RESET) wekala (Python SDK) installed editable"
 
 .PHONY: test-py
 test-py: ## Run Python unit tests with pytest

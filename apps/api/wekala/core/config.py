@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     # Docker-network sidecars (wekala-mcp-*) registered as built-in tools.
     mcp_builtin_hostnames: str = ""
 
+    # Developer SDK & API (Phase 7)
+    # Per-key sliding-window limits. Defaults match the CLAUDE.md plan.
+    api_rate_limit_per_minute: int = 60
+    api_rate_limit_per_day: int = 10_000
+    # Webhook delivery: exponential backoff (1s, 5s, 25s, 2m, 10m), max 5 attempts.
+    webhook_max_attempts: int = 5
+    webhook_initial_backoff_s: int = 1
+    webhook_delivery_timeout_s: float = 10.0
+    # Worker tick interval — how often the delivery worker scans for due retries.
+    webhook_worker_interval_s: int = 5
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.wekala_cors_origins.split(",")]

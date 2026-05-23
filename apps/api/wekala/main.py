@@ -1,12 +1,16 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
 
 from wekala.api.v1.router import router
 from wekala.core.config import settings
+from wekala.services.webhook_service import worker as webhook_worker
 
 log = structlog.get_logger()
 
@@ -14,8 +18,14 @@ log = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     log.info("wekala_api.startup", env=settings.wekala_env)
-    yield
-    log.info("wekala_api.shutdown")
+    # Start the webhook delivery worker (Phase 7). Runs in-process as
+    # an asyncio task; cleaned up on shutdown.
+    webhook_worker.start()
+    try:
+        yield
+    finally:
+        await webhook_worker.stop()
+        log.info("wekala_api.shutdown")
 
 
 app = FastAPI(
@@ -40,3 +50,40 @@ app.include_router(router)
 @app.get("/healthz")
 async def health() -> dict:  # type: ignore[type-arg]
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Public OpenAPI (Phase 7)
+# Strips internal-only endpoints — only `tags=["public"]` and `tags=["webhooks"]`
+# (admin self-service for managing event subscriptions) are exposed.
+# Used by the SDK generator and by the public docs portal.
+# ---------------------------------------------------------------------------
+
+_PUBLIC_TAGS: frozenset[str] = frozenset({"public", "webhooks"})
+
+
+def _public_openapi() -> dict[str, Any]:
+    """Return a filtered OpenAPI 3 document with only public-tagged operations."""
+    full = get_openapi(
+        title="Wekala Public API",
+        version="0.1.0",
+        description="External-caller API. Authenticate with `Authorization: Bearer wk_...`.",
+        routes=app.routes,
+    )
+    filtered_paths: dict[str, dict[str, Any]] = {}
+    for path, operations in full.get("paths", {}).items():
+        kept_ops: dict[str, Any] = {}
+        for method, op in operations.items():
+            tags = op.get("tags") or []
+            if any(tag in _PUBLIC_TAGS for tag in tags):
+                kept_ops[method] = op
+        if kept_ops:
+            filtered_paths[path] = kept_ops
+    full["paths"] = filtered_paths
+    return full
+
+
+@app.get("/v1/openapi.json", include_in_schema=False)
+async def public_openapi() -> JSONResponse:
+    """Filtered OpenAPI spec exposing only public-tagged endpoints."""
+    return JSONResponse(_public_openapi())

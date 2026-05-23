@@ -485,7 +485,63 @@ export const api = {
         token
       ),
   },
+  apiKeys: {
+    list: (workspaceId: string, token: string) =>
+      request<ApiKeyOut[]>(`/v1/workspaces/${workspaceId}/api-keys`, {}, token),
+    create: (workspaceId: string, name: string, token: string) =>
+      request<ApiKeyCreatedOut>(
+        `/v1/workspaces/${workspaceId}/api-keys`,
+        { method: "POST", body: JSON.stringify({ name }) },
+        token
+      ),
+    revoke: (workspaceId: string, keyId: string, token: string) =>
+      request<void>(`/v1/workspaces/${workspaceId}/api-keys/${keyId}`, { method: "DELETE" }, token),
+  },
+  webhooks: {
+    list: (workspaceId: string, token: string) =>
+      request<WebhookOut[]>(`/v1/workspaces/${workspaceId}/webhooks`, {}, token),
+    create: (
+      workspaceId: string,
+      body: { name: string; url: string; events: string[] },
+      token: string
+    ) =>
+      request<WebhookCreatedOut>(
+        `/v1/workspaces/${workspaceId}/webhooks`,
+        { method: "POST", body: JSON.stringify(body) },
+        token
+      ),
+    delete: (workspaceId: string, subscriptionId: string, token: string) =>
+      request<void>(
+        `/v1/workspaces/${workspaceId}/webhooks/${subscriptionId}`,
+        { method: "DELETE" },
+        token
+      ),
+    events: (workspaceId: string, token: string) =>
+      request<string[]>(`/v1/workspaces/${workspaceId}/webhooks/events`, {}, token),
+  },
 };
+
+export type ApiKeyOut = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+};
+
+export type ApiKeyCreatedOut = ApiKeyOut & { key: string };
+
+export type WebhookOut = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  url: string;
+  events: string[];
+  secret_prefix: string;
+  status: string;
+  created_at: string;
+};
+
+export type WebhookCreatedOut = WebhookOut & { secret: string };
 
 export type VettingRunOut = {
   id: string;

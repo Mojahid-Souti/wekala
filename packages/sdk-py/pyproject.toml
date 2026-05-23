@@ -1,0 +1,18 @@
+[project]
+name = "wekala"
+version = "0.1.0"
+description = "Wekala Python SDK — agent invocation + webhook verification"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Wekala" }]
+dependencies = [
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["wekala"]
