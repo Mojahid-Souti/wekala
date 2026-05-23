@@ -33,11 +33,13 @@ class SupabaseAuthAdapter:
             timeout=10.0,
         )
 
-    async def sign_up(self, email: str, password: str) -> UserResult:
-        r = await self._client.post("/signup", json={"email": email, "password": password})
+    async def sign_up(self, email: str, password: str, full_name: str | None = None) -> UserResult:
+        payload: dict = {"email": email, "password": password}
+        if full_name:
+            payload["data"] = {"full_name": full_name}
+        r = await self._client.post("/signup", json=payload)
         r.raise_for_status()
         data = r.json()
-        # GoTrue returns user directly when email confirmation required
         return _parse_user(data.get("user") or data)
 
     async def sign_in(self, email: str, password: str) -> SessionResult:

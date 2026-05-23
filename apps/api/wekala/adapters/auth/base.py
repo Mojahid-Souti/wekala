@@ -22,7 +22,9 @@ class SessionResult:
 class AuthService(Protocol):
     """Interface for authentication operations. Swap adapters without touching business logic."""
 
-    async def sign_up(self, email: str, password: str) -> UserResult: ...
+    async def sign_up(
+        self, email: str, password: str, full_name: str | None = None
+    ) -> UserResult: ...
 
     async def sign_in(self, email: str, password: str) -> SessionResult: ...
 

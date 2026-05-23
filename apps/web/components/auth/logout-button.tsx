@@ -1,5 +1,6 @@
 "use client";
 
+import { clearTokens } from "@/lib/auth-storage";
 import { ROUTES } from "@/lib/constants";
 import { useToast } from "@/lib/toast";
 import { useRouter } from "next/navigation";
@@ -9,8 +10,7 @@ export function LogoutButton({ label = "Sign out" }: { label?: string }) {
   const { toast } = useToast();
 
   function handleClick() {
-    sessionStorage.removeItem("access_token");
-    sessionStorage.removeItem("refresh_token");
+    clearTokens();
     toast("Signed out.", "info");
     router.replace(ROUTES.login);
   }

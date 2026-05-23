@@ -1,11 +1,10 @@
 import { LoginForm } from "@/components/auth/login-form";
+import { Suspense } from "react";
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
-        <LoginForm />
-      </div>
-    </main>
+    <Suspense fallback={<div className="h-96 animate-pulse rounded-lg bg-neutral-100" />}>
+      <LoginForm />
+    </Suspense>
   );
 }

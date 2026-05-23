@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getToken } from "./auth-storage";
 
 export function useToken(): string {
   const [token, setToken] = useState("");
   useEffect(() => {
-    setToken(sessionStorage.getItem("access_token") ?? "");
+    setToken(getToken());
   }, []);
   return token;
 }

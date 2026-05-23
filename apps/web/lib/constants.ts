@@ -4,6 +4,7 @@ export const ROUTES = {
   signup: "/signup",
   verify: "/verify",
   resetPassword: "/reset-password",
+  newPassword: "/reset-password/new",
   dashboard: "/dashboard",
   newWorkspace: "/workspaces/new",
   workspace: (workspaceId: string) => `/workspaces/${workspaceId}`,

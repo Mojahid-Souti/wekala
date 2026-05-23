@@ -1,11 +1,10 @@
+import { clearTokens } from "./auth-storage";
 import { API_URL, ROUTES } from "./constants";
 
 function handleExpiredSession(): void {
-  // Only run in browser; avoid loop if already on an auth page.
   if (typeof window === "undefined") return;
   if (window.location.pathname.startsWith("/login")) return;
-  sessionStorage.removeItem("access_token");
-  sessionStorage.removeItem("refresh_token");
+  clearTokens();
   window.location.href = `${ROUTES.login}?expired=1`;
 }
 
@@ -135,8 +134,11 @@ export type HireOut = {
 
 export const api = {
   auth: {
-    signup: (email: string, password: string) =>
-      request("/v1/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) }),
+    signup: (email: string, password: string, fullName?: string) =>
+      request("/v1/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ email, password, full_name: fullName }),
+      }),
     login: (email: string, password: string) =>
       request<{ access_token: string; refresh_token: string; user: { id: string; email: string } }>(
         "/v1/auth/login",

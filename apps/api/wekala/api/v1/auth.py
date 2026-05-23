@@ -18,6 +18,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
+    full_name: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -25,6 +26,18 @@ class SignUpRequest(BaseModel):
         if len(v) < 12:
             raise ValueError("Password must be at least 12 characters")
         return v
+
+    @field_validator("full_name")
+    @classmethod
+    def full_name_length(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        stripped = v.strip()
+        if not stripped:
+            return None
+        if not 2 <= len(stripped) <= 60:
+            raise ValueError("Full name must be 2–60 characters")
+        return stripped
 
 
 class LoginRequest(BaseModel):
@@ -80,7 +93,7 @@ async def signup(
     auth: Annotated[AuthService, Depends(get_auth_service)],
 ) -> UserOut:
     try:
-        user = await auth.sign_up(body.email, body.password)
+        user = await auth.sign_up(body.email, body.password, full_name=body.full_name)
     except Exception as exc:
         # Return identical error shape regardless of reason (no user enumeration)
         raise HTTPException(
