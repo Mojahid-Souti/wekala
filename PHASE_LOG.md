@@ -249,3 +249,42 @@ Format:
   - **Per-agent materialized view (mv_agent_daily)** — deferred; raw queries fast enough for current scale
   - **Hot-reload of YAML policies** — restart required after editing hours_saved.yaml / anomalies.yaml
 - ADRs added: —
+
+## Phase 11 — Design system foundation
+
+- Started: 2026-05-23
+- Completed: 2026-05-23
+- Tag: phase-11-complete
+- Notes:
+  - **shadcn/ui v4 installed** with Neutral baseColor, light-mode only (dark-mode tokens deferred per POC scope). 16 primitives generated: alert, avatar, badge, button, card, checkbox, dialog, input, input-otp, label, separator, sheet, skeleton, tabs, tooltip.
+  - **Tailwind 3 compatibility patches**: shadcn v4 ships `data-checked:` / `has-disabled:` syntax that only compiles under Tailwind 4. Rewrote `checkbox.tsx` and `input-otp.tsx` to use `data-[state=checked]:` for our Tailwind 3.4 setup. Without this, the checkbox stayed empty when checked and OTP cells were missing borders.
+  - **Design tokens** in `globals.css` as HSL CSS variables, mapped to Tailwind color names in `tailwind.config.ts`. `--primary: 240 5.9% 10%` = near-black; the whole auth flow's "fully black button + white check" comes from this single token.
+  - **AuthShell** wraps every `(auth)` page (login / signup / verify / reset-password / reset-password/new) — split layout, form panel on the left, BrandPanel on the right at `lg:grid-cols-2` (hidden below `lg`).
+  - **BrandPanel** is a JS-driven 3-scene showcase (Bazaar / Command Center / Agent Detail) cycling every 7s with synced title/subtitle/dots. Dots are clickable; auto-cycle resumes from manual selections. Scene intro animations (card-pulse, bar-grow, tab-highlight) are CSS-keyframed and `motion-safe:` so reduced-motion users still get the scene cross-fade but no jitter.
+  - **AnimatedFormPanel** is a client wrapper that re-keys its children on `pathname` change and plays a 500ms `rotateY(-90deg → 0deg)` flip-in with cubic-bezier easing (`prefers-reduced-motion` → 200ms opacity fade). Because the BrandPanel lives in the layout (above AnimatedFormPanel), navigating between auth routes only flips the form — the showcase keeps its scene state.
+  - **Infrastructure fixes** to make shadcn-add succeed inside the pnpm-11 + container setup: `.npmrc` adds `strict-dep-builds=false`, root `package.json` declares matching `pnpm.ignoredBuiltDependencies`, and the web Dockerfile passes `--config.strict-dep-builds=false` to the install step. Without these, `pnpm install` blew up on msw's postinstall script.
+  - **CLAUDE.md §6 updated**: Phases 11–15 appended with an execution-order note (11–15 ship before deferred 9–10).
+- Outstanding:
+  - **Post-signup onboarding wizard** — explicitly deferred (Phase 11 scope cut); future follow-up will add a one-time first-workspace modal gated by `user_metadata.onboarding_complete`.
+  - **Theme customisation per workspace** — deferred.
+  - **Dark-mode toggle UI** — tokens unused, no switcher.
+- ADRs added: —
+
+## Phase 12 — Auth flow redesign
+
+- Started: 2026-05-23
+- Completed: 2026-05-23
+- Tag: phase-12-complete
+- Notes:
+  - **Four auth pages rebuilt** on shadcn primitives + Flynt-style split layout: sign-in, sign-up, verify-email, reset-password (2-step). Backend `/v1/auth/signup` now accepts `full_name` (2–60 chars, Pydantic-validated) and the SupabaseAuthAdapter passes it as GoTrue's `data` so it lands in `user_metadata.full_name`.
+  - **Sign-up validation moved client-side** (with server-side defence in depth): name length 2–60, password ≥ 12, confirm equals password, terms checked. Submit button stays disabled until every condition holds. Inline per-field errors after blur. Strength meter (4 segments, red→amber→emerald→deep-emerald) driven by a small heuristic in `lib/password-strength.ts` — no zxcvbn dep.
+  - **Sign-in "Remember me" toggle** swaps where the JWT lives: unchecked → sessionStorage (default, cleared on tab close), checked → localStorage (persists). Triggered the rule-of-three DRY signal — five files were doing the same sessionStorage dance — so consolidated into `lib/auth-storage.ts` (getToken / setTokens / clearTokens / rememberMePreferred). All five callers (use-token, api, auth-guard, guest-guard, logout-button) now share this helper.
+  - **Verify-email OTP** uses shadcn's `input-otp` primitive (rewritten for Tailwind 3 — see Phase 11 note). Auto-submits the moment the value reaches 6 digits. **Paste-only**: keyboard typing is rejected by the onChange filter (`inputMode="none"` suppresses mobile keyboards too) — only full 6-digit paste or backspace-style reduction is accepted. Per-user request: forces them to copy from the email, removing typo risk.
+  - **OTP failure no longer loops**: the original `submittedRef.current = ""` reset in the catch block caused setLoading(false) → useEffect re-fires → POST again. Fixed by NOT resetting the ref on error and instead clearing the cells (`setCode("")`); the next paste produces a different code string so the guard naturally bypasses.
+  - **Reset-password is a two-step flow**: `/reset-password` calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: '<origin>/reset-password/new' })` so the email link lands users on the completion page; `/reset-password/new` checks `getSession()` to confirm a recovery session is present (else shows an "expired link" state with a button back to step 1). Success uses `supabase.auth.updateUser({ password })` then signs out + toasts + routes to `/login`.
+  - **Flip transition validated** across all four redesigned pages — brand panel survives every navigation (verified via React DevTools: BrandPanel's `active` state doesn't reset).
+- Outstanding:
+  - **Google + Apple OAuth wiring** — buttons are disabled and tooltip-labelled "Coming soon" per UX.
+  - **MFA flow** — interface stub only, no UI.
+  - **Existing `/v1/auth/reset-password` backend endpoint** is now bypassed by the client-side `resetPasswordForEmail` call but kept for potential future use; could be removed in a cleanup pass.
+- ADRs added: —
