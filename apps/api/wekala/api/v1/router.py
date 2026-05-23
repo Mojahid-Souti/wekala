@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from wekala.api.v1 import (
     agents,
+    analytics,
     auth,
     bazaar,
     knowledge_base,
@@ -25,3 +26,5 @@ router.include_router(vetting.router)
 # Phase 7
 router.include_router(public.router)
 router.include_router(webhooks.router)
+# Phase 8
+router.include_router(analytics.router)

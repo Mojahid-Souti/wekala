@@ -497,6 +497,47 @@ export const api = {
     revoke: (workspaceId: string, keyId: string, token: string) =>
       request<void>(`/v1/workspaces/${workspaceId}/api-keys/${keyId}`, { method: "DELETE" }, token),
   },
+  analytics: {
+    kpis: (workspaceId: string, rangeDays: number, token: string) =>
+      request<KpiOut>(
+        `/v1/workspaces/${workspaceId}/analytics/kpis?range_days=${rangeDays}`,
+        {},
+        token
+      ),
+    timeseries: (workspaceId: string, rangeDays: number, token: string) =>
+      request<TimeseriesPointOut[]>(
+        `/v1/workspaces/${workspaceId}/analytics/timeseries?range_days=${rangeDays}`,
+        {},
+        token
+      ),
+    topAgents: (workspaceId: string, rangeDays: number, n: number, token: string) =>
+      request<AgentLeaderboardRowOut[]>(
+        `/v1/workspaces/${workspaceId}/analytics/top-agents?range_days=${rangeDays}&n=${n}`,
+        {},
+        token
+      ),
+    evaluateAnomalies: (workspaceId: string, token: string) =>
+      request<AnomalyEvalOut[]>(`/v1/workspaces/${workspaceId}/anomalies/evaluate`, {}, token),
+    listAnomalies: (workspaceId: string, token: string) =>
+      request<AnomalyOut[]>(`/v1/workspaces/${workspaceId}/anomalies`, {}, token),
+    acknowledgeAnomaly: (workspaceId: string, alertId: string, token: string) =>
+      request<AnomalyOut>(
+        `/v1/workspaces/${workspaceId}/anomalies/${alertId}/acknowledge`,
+        { method: "POST" },
+        token
+      ),
+    auditLog: (
+      workspaceId: string,
+      params: { action?: string; page?: number; size?: number },
+      token: string
+    ) => {
+      const qs = new URLSearchParams();
+      if (params.action) qs.set("action", params.action);
+      qs.set("page", String(params.page ?? 1));
+      qs.set("size", String(params.size ?? 50));
+      return request<AuditLogPageOut>(`/v1/workspaces/${workspaceId}/audit-log?${qs}`, {}, token);
+    },
+  },
   webhooks: {
     list: (workspaceId: string, token: string) =>
       request<WebhookOut[]>(`/v1/workspaces/${workspaceId}/webhooks`, {}, token),
@@ -542,6 +583,72 @@ export type WebhookOut = {
 };
 
 export type WebhookCreatedOut = WebhookOut & { secret: string };
+
+export type KpiOut = {
+  invocations: number;
+  hours_saved: number;
+  active_agents: number;
+  p95_latency_ms: number;
+  tool_calls: number;
+  vetting_runs_completed: number;
+  documents_uploaded: number;
+  range_days: number;
+};
+
+export type TimeseriesPointOut = {
+  day: string;
+  invocations: number;
+  tool_calls: number;
+  avg_latency_ms: number;
+};
+
+export type AgentLeaderboardRowOut = {
+  agent_id: string;
+  name: string;
+  invocations: number;
+  success_rate: number;
+  p95_latency_ms: number;
+  hours_saved: number;
+};
+
+export type AnomalyOut = {
+  id: string;
+  metric_name: string;
+  threshold_kind: string;
+  threshold_value: number;
+  observed_value: number;
+  status: string;
+  severity: string;
+  note: string;
+  window_start: string;
+  window_end: string;
+  created_at: string;
+};
+
+export type AnomalyEvalOut = {
+  rule_id: string;
+  metric: string;
+  fired: boolean;
+  observed_value: number;
+  threshold: number;
+  z_score: number | null;
+};
+
+export type AuditLogPageOut = {
+  items: {
+    id: string;
+    timestamp: string;
+    actor_user_id: string | null;
+    action: string;
+    resource_type: string | null;
+    resource_id: string | null;
+    outcome: string;
+    metadata: Record<string, unknown>;
+  }[];
+  total: number;
+  page: number;
+  size: number;
+};
 
 export type VettingRunOut = {
   id: string;

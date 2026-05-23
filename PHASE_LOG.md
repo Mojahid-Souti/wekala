@@ -222,3 +222,30 @@ Format:
   - **Worker dead-letter UI** — `webhook_deliveries.status='dead'` rows have no surface yet.
   - **Phase 2 PATCH bug** still present: `update()` wipes `dify_dsl` if not provided.
 - ADRs added: —
+
+## Phase 8 — Command Center & analytics (core slice)
+
+- Started: 2026-05-23
+- Completed: 2026-05-23
+- Tag: phase-8-complete
+- Notes:
+  - KPI dashboard, daily timeseries, top-N agents leaderboard, on-read anomaly detection (z-score + absolute), audit log search + streaming CSV export.
+  - **Materialized view `mv_workspace_daily`** rolls up daily counts from api_request_log, tool_invocations, vetting_runs, audit_log into a single (workspace_id, day) row per day. UNIQUE index `(workspace_id, day)` lets us refresh CONCURRENTLY without blocking reads. First refresh after migration is non-CONCURRENT (Postgres requires populated data for CONCURRENTLY); subsequent refreshes use CONCURRENTLY.
+  - **MV refresh worker** runs in the API process as a long-running asyncio task (started in lifespan, cleaned up on shutdown). Tick interval 60s.
+  - **Hours-saved policy** in YAML — first match wins: `by_agent_id` → `by_agent_name_pattern` (fnmatch) → defaults. Hot-reload requires API restart for now.
+  - **Anomaly detection on-read**: each Command Center load runs the rules against the latest MV row; first time a threshold is crossed for a given day, persist an `anomaly_alerts` row that survives reloads and can be acknowledged. Rules in YAML: invocations_spike (z>3σ over 7d), tool_failure_rate (>25% absolute), latency_p95_spike (z>4σ over 7d).
+  - **OPA additions**: analytics.view (viewer), analytics.export (builder), anomaly.ack (admin).
+  - **Audit-log search uses Postgres** (no Meilisearch dep) — filter-heavy on (actor_workspace_id, action, timestamp) hits existing Phase 1 indexes.
+  - **CSV export streams** via async generator → flat memory regardless of row count; capped at 10k per request.
+  - **Policy path resolution fixed**: parents[N] count differs between host (apps/api/wekala/...) and slim container (/app/wekala/...). New `_find_repo_policies_dir()` walks up looking for an `infra/policies/` directory instead of assuming depth.
+  - **Members page** added en route (Phase 5 left a 404 link) — full members list + invite form, reusing the existing /v1/workspaces/{wid}/members endpoint.
+  - 9 unit tests for policy loaders + z-score math; all pass.
+- Outstanding:
+  - **Per-user breakdowns + k-anonymity UI** — infra is there, no surface yet
+  - **Langfuse drill-down deep-links** — needs gateway path to record trace_id on every invocation
+  - **Token-cost USD KPI** — needs LLM gateway integration (Phase 5/7 hook)
+  - **Anomaly auto-resolve** — currently manual ack only
+  - **Slack/email anomaly routing via Phase 7 webhooks** — webhook system can carry, needs routing rules UI
+  - **Per-agent materialized view (mv_agent_daily)** — deferred; raw queries fast enough for current scale
+  - **Hot-reload of YAML policies** — restart required after editing hours_saved.yaml / anomalies.yaml
+- ADRs added: —

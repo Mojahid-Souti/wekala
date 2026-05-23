@@ -17,6 +17,7 @@ export const ROUTES = {
   bazaar: "/bazaar",
   bazaarAgent: (agentId: string) => `/bazaar/${agentId}`,
   hired: "/bazaar/hired",
+  commandCenter: (workspaceId: string) => `/workspaces/${workspaceId}/command-center`,
   workspaceSettings: (workspaceId: string) => `/workspaces/${workspaceId}/settings`,
   workspaceDeveloper: (workspaceId: string) => `/workspaces/${workspaceId}/settings/developer`,
   tools: (workspaceId: string) => `/workspaces/${workspaceId}/tools`,

@@ -64,6 +64,10 @@ min_role := {
   "webhook.view":        "viewer",
   "public.invoke":       "viewer",
   "public.stream":       "viewer",
+  # Command Center & analytics (Phase 8)
+  "analytics.view":      "viewer",
+  "analytics.export":    "builder",
+  "anomaly.ack":         "admin",
 }
 
 # Actions where rank-based gating is wrong because the roles are intentionally

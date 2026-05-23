@@ -191,7 +191,7 @@ format: ## Auto-fix formatting (Python + TypeScript)
 ##@ Testing
 
 .PHONY: test
-test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-phase-4 test-phase-5 test-phase-6 test-phase-7 test-py test-ts ## Run all tests
+test: test-phase-0 test-phase-1 test-phase-2 test-phase-3 test-phase-4 test-phase-5 test-phase-6 test-phase-7 test-phase-8 test-py test-ts ## Run all tests
 
 .PHONY: test-phase-0
 test-phase-0: ## Run Phase 0 automated integration tests (requires running stack)
@@ -397,6 +397,36 @@ test-phase-7: ## Verify Phase 7 required files are present and unit tests pass
 sdk-py: ## Install the local Python SDK in editable mode
 	@cd packages/sdk-py && uv pip install -e .
 	@echo "  $(GREEN)✓$(RESET) wekala (Python SDK) installed editable"
+
+.PHONY: test-phase-8
+test-phase-8: ## Verify Phase 8 required files are present and unit tests pass
+	@echo "$(BOLD)Phase 8 file validation:$(RESET)"
+	@missing=0; \
+	files=( \
+	  "apps/api/wekala/services/analytics_service.py" \
+	  "apps/api/wekala/services/anomaly_service.py" \
+	  "apps/api/wekala/core/policies/analytics_policies.py" \
+	  "apps/api/wekala/api/v1/analytics.py" \
+	  "apps/api/alembic/versions/0018_analytics.py" \
+	  "apps/api/tests/test_anomaly.py" \
+	  "infra/policies/hours_saved.yaml" \
+	  "infra/policies/anomalies.yaml" \
+	  "apps/web/app/(app)/workspaces/[workspaceId]/command-center/page.tsx" \
+	  "docs/phases/MANUAL_TEST_PHASE_8.md" \
+	); \
+	for f in "$${files[@]}"; do \
+	  if [ ! -f "$$f" ]; then echo "  MISSING: $$f"; missing=$$((missing+1)); \
+	  else echo "  $(GREEN)✓$(RESET) $$f"; fi; \
+	done; \
+	[ "$$missing" -eq 0 ] && echo "$(GREEN)All Phase 8 files present.$(RESET)" || { echo "$(BOLD)$$missing file(s) missing.$(RESET)"; exit 1; }
+	@echo ""
+	@echo "$(BOLD)Phase 8 unit tests:$(RESET)"
+	@cd apps/api && uv run pytest tests/test_anomaly.py -v
+
+.PHONY: mv-refresh
+mv-refresh: ## Manually refresh the analytics materialized view
+	@docker exec wekala-supabase-db psql -U postgres -d postgres -c "REFRESH MATERIALIZED VIEW mv_workspace_daily;"
+	@echo "  $(GREEN)✓$(RESET) mv_workspace_daily refreshed"
 
 .PHONY: test-py
 test-py: ## Run Python unit tests with pytest

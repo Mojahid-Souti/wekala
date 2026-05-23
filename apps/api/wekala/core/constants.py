@@ -70,6 +70,10 @@ class Action(StrEnum):
     WEBHOOK_CREATE = "webhook.create"
     WEBHOOK_DELETE = "webhook.delete"
     WEBHOOK_VIEW = "webhook.view"
+    # Command Center & analytics (Phase 8)
+    ANALYTICS_VIEW = "analytics.view"
+    ANALYTICS_EXPORT = "analytics.export"
+    ANOMALY_ACK = "anomaly.ack"
 
 
 class ResourceType(StrEnum):
@@ -95,6 +99,9 @@ class ResourceType(StrEnum):
     WEBHOOK_SUBSCRIPTION = "webhook_subscription"
     WEBHOOK_DELIVERY = "webhook_delivery"
     API_REQUEST = "api_request"
+    # Phase 8
+    ANOMALY = "anomaly"
+    METRIC = "metric"
 
 
 class Outcome(StrEnum):

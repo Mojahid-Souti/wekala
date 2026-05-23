@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -10,20 +12,54 @@ from fastapi.responses import JSONResponse
 
 from wekala.api.v1.router import router
 from wekala.core.config import settings
+from wekala.db.session import AsyncSessionLocal
 from wekala.services.webhook_service import worker as webhook_worker
 
 log = structlog.get_logger()
+
+# Phase 8 — refresh the Command Center materialized view this often (seconds).
+_MV_REFRESH_INTERVAL_S = 60
+
+
+async def _mv_refresh_loop(stop_event: asyncio.Event) -> None:
+    """Refresh mv_workspace_daily every 60s.
+
+    CONCURRENTLY keeps read traffic unblocked, but Postgres rejects it until
+    the MV has been populated once. First pass is non-CONCURRENT; subsequent
+    passes use CONCURRENTLY.
+    """
+    from sqlalchemy import text as _text
+
+    first = True
+    while not stop_event.is_set():
+        sql = (
+            "REFRESH MATERIALIZED VIEW mv_workspace_daily"
+            if first
+            else "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_workspace_daily"
+        )
+        try:
+            async with AsyncSessionLocal.begin() as session:
+                await session.execute(_text(sql))
+            first = False
+        except Exception:  # noqa: BLE001 — loop must not die
+            log.exception("mv_refresh_failed")
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(stop_event.wait(), timeout=_MV_REFRESH_INTERVAL_S)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     log.info("wekala_api.startup", env=settings.wekala_env)
-    # Start the webhook delivery worker (Phase 7). Runs in-process as
-    # an asyncio task; cleaned up on shutdown.
     webhook_worker.start()
+    mv_stop = asyncio.Event()
+    mv_task = asyncio.create_task(_mv_refresh_loop(mv_stop), name="mv-refresh-worker")
     try:
         yield
     finally:
+        mv_stop.set()
+        mv_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await mv_task
         await webhook_worker.stop()
         log.info("wekala_api.shutdown")
 

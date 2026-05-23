@@ -10,6 +10,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
   const navItems = [
     { label: "Overview", href: ROUTES.workspace(workspaceId) },
+    { label: "Command Center", href: ROUTES.commandCenter(workspaceId) },
     { label: "Agents", href: ROUTES.agents(workspaceId) },
     { label: "Knowledge Base", href: ROUTES.knowledgeBase(workspaceId) },
     { label: "Tools", href: ROUTES.tools(workspaceId) },

@@ -696,3 +696,40 @@ class WebhookDelivery(Base):
     last_status_code: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+# =============================================================================
+# Phase 8 — Command Center & analytics
+# =============================================================================
+
+
+class AnomalyAlert(Base):
+    """An automatically-detected metric anomaly. Reviewed by workspace admins."""
+
+    __tablename__ = "anomaly_alerts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open','acknowledged','resolved')", name="anomaly_alert_status"
+        ),
+        CheckConstraint("threshold_kind IN ('zscore','absolute')", name="anomaly_threshold_kind"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    metric_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    threshold_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    threshold_value: Mapped[float] = mapped_column(nullable=False)
+    observed_value: Mapped[float] = mapped_column(nullable=False)
+    window_start: Mapped[datetime] = mapped_column(nullable=False)
+    window_end: Mapped[datetime] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=True
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    alert_metadata: Mapped[dict] = mapped_column(  # type: ignore[type-arg]
+        "alert_metadata", JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
