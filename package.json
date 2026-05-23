@@ -7,9 +7,22 @@
     "pnpm": ">=9"
   },
   "scripts": {
-    "lint": "pnpm --filter wekala-web biome ci .",
-    "format": "pnpm --filter wekala-web biome format --write .",
-    "type-check": "pnpm --filter wekala-web tsc --noEmit",
+    "lint": "pnpm --filter wekala-web exec biome ci .",
+    "format": "pnpm --filter wekala-web exec biome format --write .",
+    "type-check": "pnpm --filter wekala-web run type-check",
     "test": "pnpm --filter wekala-web test"
+  },
+  "pnpm": {
+    "strictDepBuilds": false,
+    "onlyBuiltDependencies": [],
+    "ignoredBuiltDependencies": [
+      "msw",
+      "esbuild",
+      "@biomejs/biome",
+      "@tailwindcss/oxide",
+      "core-js",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }

@@ -78,6 +78,8 @@ lerna-debug.log*
 .stylelintcache
 .parcel-cache
 .next/
+next-env.d.ts
+*.tsbuildinfo
 out/
 .nuxt/
 dist/

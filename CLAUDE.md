@@ -378,6 +378,8 @@ That's it. Everything else is added when its phase calls for it.
 
 Each phase below is a unit of work. Follow Rules 1–10 strictly. Each phase ends with: security review → manual test pass → git tag → push.
 
+**Execution order (added post-Phase 8):** Phases 11–15 (UI redesign + builder bridges) execute before Phases 9 (Voice) and 10 (Localization). Numbering stays append-only so tags don't shift. Within Phases 11–15, the *unit of approval is a page*, not a phase: each page goes design → user confirms → implementation → next page. Git tags still happen at phase boundaries.
+
 ---
 
 ### Phase 0 — Foundation & ground rules
@@ -986,6 +988,215 @@ Each phase below is a unit of work. Follow Rules 1–10 strictly. Each phase end
 - [ ] Arabic voice session works end-to-end
 
 **Git tag:** `phase-10-complete`
+
+---
+
+### Phase 11 — Design system foundation
+
+**Goal:** Install shadcn/ui as the design system, define light-mode design tokens, build the auth-layout shell, and ship a post-signup onboarding flow. After this phase every new screen is built from shadcn primitives instead of hand-rolled Tailwind.
+
+**Already true before Phase 11:** Phases 0–8 ship working features but use hand-rolled Tailwind throughout. shadcn is NOT installed in `apps/web` yet. The localization architecture (next-intl) is wired and must keep working with shadcn components.
+
+**Security review checklist:**
+- [ ] shadcn primitives reviewed: all are client components, zero new runtime deps beyond `@radix-ui/*`, `class-variance-authority`, `tailwind-merge`, `lucide-react`
+- [ ] No `dangerouslySetInnerHTML` in any primitive or wrapper
+- [ ] Onboarding flow writes to existing JWT-authenticated endpoints only; no new attack surface
+- [ ] Skeleton/empty/loading states never leak partial data from other tenants
+- [ ] `cn()` helper does not allow class injection via untrusted strings
+
+**Features:**
+- [ ] `pnpm dlx shadcn@latest init` in `apps/web` — creates `components.json`, `components/ui/`, `lib/utils.ts`
+- [ ] Light-mode-only design tokens in `app/globals.css` (dark-mode CSS variables present but commented or unused per user choice)
+- [ ] Wekala brand accent committed (decided per-page on first branded surface)
+- [ ] Core primitives installed: Button, Input, Label, Card, Form, Checkbox, Alert, Dialog, Sheet, Avatar, Badge, Skeleton, Separator, Tabs, Tooltip
+- [ ] Auth-layout shell (`(auth)/layout.tsx`) updated to a split hero shell that Phase 12 pages slot into
+- [ ] Post-signup onboarding wizard — runs once per user, prompts for first workspace + theme intro; gated by a `user_metadata.onboarding_complete` boolean
+- [ ] Loading skeletons + empty states standardized across every list page (replaces ad-hoc `animate-pulse` divs)
+
+**Cut for POC:**
+- ❌ Dark-mode toggle UI (tokens emitted but the switcher waits for Phase 13's user settings)
+- ❌ Theme customization per workspace
+
+**OSS tools:** shadcn/ui, Radix UI primitives, class-variance-authority, tailwind-merge, lucide-react
+
+**Plan template:** before implementing, output the brand-accent choice + the list of primitives to install, and confirm the onboarding-wizard flow.
+
+**Manual test checklist:**
+- [ ] `pnpm exec biome check .` passes after shadcn init
+- [ ] All previously-built pages still render (Phase 0–8 regressions caught)
+- [ ] Onboarding wizard appears on first login after a fresh signup; never appears again after the user dismisses it
+- [ ] `cn("foo", false && "bar", "baz")` returns `"foo baz"` (utility verified)
+
+**Git tag:** `phase-11-complete`
+
+---
+
+### Phase 12 — Auth flow redesign (page-by-page)
+
+**Goal:** Replace hand-rolled Tailwind auth forms with shadcn-based, accessible, branded versions. Sign-up gains a name field, a strength meter, and a confirm-password field.
+
+**Pages, in order:**
+1. **Sign-up** — name, email, password, confirm password, terms checkbox
+2. **Sign-in** — email, password, "remember me", forgot-password link
+3. **Verify email** — friendlier illustration, clearer "check your email" CTA, paste-OTP behavior
+4. **Reset password** — request link + set-new-password completion
+
+**Security review checklist:**
+- [ ] Sign-up `full_name` sanitized server-side (length 2–60, no control chars)
+- [ ] Confirm-password validated client-side AND server-side
+- [ ] Password strength meter is purely informational; server enforces the 12-char min
+- [ ] "Remember me" only swaps sessionStorage for localStorage on this device; server still issues short-lived JWT
+- [ ] Sign-in still returns generic "Invalid credentials" (no enumeration)
+- [ ] Verify-email rate-limited per email per hour (prevents brute force on OTP)
+- [ ] Password-reset link is a Supabase-issued single-use token; never echo it in URLs visible in browser history beyond the immediate redirect
+
+**Features:**
+- [ ] `POST /v1/auth/signup` accepts optional `full_name`; stored in Supabase `user_metadata.full_name`
+- [ ] All four pages share the Phase 11 split-hero shell
+- [ ] Each form uses shadcn `Form` + `react-hook-form` + `zod` for validation
+- [ ] Show/hide password toggle on every password field (accessible — `aria-pressed`)
+- [ ] Inline per-field error messages via `FormMessage`
+- [ ] Top-of-form `Alert` (destructive) for server errors
+- [ ] All translation keys go through next-intl (no hardcoded strings)
+
+**OSS tools:** shadcn/ui Form, react-hook-form, zod, lucide-react
+
+**Plan template:** before implementing each page, output an ASCII layout sketch + field list + validation rules + component inventory + acceptance criteria, then wait for user confirmation.
+
+**Manual test checklist (per page):**
+- [ ] Visual matches the confirmed design
+- [ ] Happy path: sign-up new user → verify → sign-in succeeds → land on dashboard
+- [ ] Password < 12 chars → inline error, submit disabled
+- [ ] Confirm-password mismatch → inline error, submit disabled
+- [ ] Wrong sign-in credentials → generic "Invalid credentials"
+- [ ] Keyboard-only flow works end-to-end (tab order, focus rings, enter to submit)
+- [ ] Screen-reader labels correct (Lighthouse a11y > 95)
+- [ ] Reset-password email arrives in MailHog within 5s
+
+**Git tag:** `phase-12-complete`
+
+---
+
+### Phase 13 — App shell + dashboard
+
+**Goal:** A polished, navigable shell — collapsible double-sidebar, branded header, dashboard hero with recent activity, and a refreshed workspace home + settings.
+
+**Pages, in order:**
+1. **App layout** — sidebar (workspace switcher + section nav, both collapsible) + header (workspace breadcrumb, user menu)
+2. **Dashboard** — hero "welcome back" + quick actions + recent activity (from `audit_log`) + KPI snapshot
+3. **Workspace home** — replace the current stat-cards page with a richer dashboard scoped to one workspace
+4. **Workspace settings** — converted to tabs (General / Members / Developer / Danger zone)
+
+**Security review checklist:**
+- [ ] Workspace switcher only lists workspaces the user is a member of (RLS verified)
+- [ ] Recent activity is scoped to the workspace; cross-tenant rows never leak
+- [ ] User menu's "Sign out" call to clear sessionStorage is irrevocable from server-side too (existing /auth/logout)
+- [ ] Settings tabs respect role (Members + Danger zone admin-only; Developer admin-only)
+
+**Features:**
+- [ ] Collapsible double-sidebar with persisted state in localStorage
+- [ ] Workspace switcher dropdown (avatar + name)
+- [ ] Breadcrumb in header reflects current page
+- [ ] Dashboard recent-activity reads from `audit_log` (last 20 events)
+- [ ] Quick actions: New Agent, Browse Bazaar, Open Command Center
+- [ ] Workspace settings split into Tabs (General / Members / Developer / Danger zone) using shadcn `Tabs`
+
+**OSS tools:** shadcn/ui Tabs, Sheet, Avatar, DropdownMenu
+
+**Manual test checklist (per page):**
+- [ ] Sidebar collapses + expands; state persists across reload
+- [ ] Active route highlights
+- [ ] Workspace switcher navigates correctly
+- [ ] Recent activity matches `SELECT … FROM audit_log WHERE actor_workspace_id=… ORDER BY timestamp DESC LIMIT 20`
+- [ ] Settings tabs hide admin-only tabs for non-admin viewers (verified with a viewer-role user)
+
+**Git tag:** `phase-13-complete`
+
+---
+
+### Phase 14 — Agent flow redesign
+
+**Goal:** A polished agent list, a tabbed agent detail page, and a New-Agent flow that offers four paths: Template / Upload YAML / Chat-to-build / Build in Dify.
+
+**Pages, in order:**
+1. **Agents list** — table or grid with filters (status, classification, vetting), search, sort
+2. **Agent detail** — header with status + vetting + classification badges; tabs: Overview / Versions / Vetting / Tools / Test
+3. **New Agent** — 4 tabs: From Template / Upload YAML / Chat-to-build / Build in Dify
+4. **Test playground** — streaming test runs (replaces the current one-shot test panel)
+
+**Security review checklist:**
+- [ ] Test playground enforces the existing sandbox quota (Phase 2; 100/day per user)
+- [ ] Chat-to-build wizard calls the LLM gateway with the workspace's classification context; never lets the agent it's building "decide" its own classification
+- [ ] Generated YAML from chat-to-build is treated as untrusted user input — must still pass Phase 6 vetting before publish
+- [ ] Test-streaming SSE endpoint closes connections on auth expiry
+- [ ] Per-agent tools whitelist still enforced at invocation time (Phase 5)
+
+**Features:**
+- [ ] Agents list: filter + search + sort; pagination (default 20)
+- [ ] Agent detail tabs (5 tabs, each backed by an existing endpoint)
+- [ ] New Agent — 4-tab modal/page; Template + Upload tabs already exist (just restyled), Chat-to-build + Build-in-Dify are new
+- [ ] Test playground with SSE token streaming (new endpoint `POST /v1/workspaces/{wid}/agents/{aid}/test-stream`)
+- [ ] Chat-to-build wizard: user chats with Claude/Ollama, system asks "What should this agent do?", "Tools?", "Classification?", generates a Dify YAML, presents for confirm + import
+
+**Backend changes:**
+- New SSE endpoint for streaming test responses
+- New endpoint for chat-to-build wizard: stateful conversation → YAML generation → returns YAML for review
+
+**OSS tools:** shadcn/ui Tabs, DataTable, Command (cmdk), Dialog
+
+**Manual test checklist (per page):**
+- [ ] Agents list filters update URL, browser-back works
+- [ ] Each agent-detail tab loads and shows correct data
+- [ ] Test playground streams tokens incrementally (not one-shot)
+- [ ] Chat-to-build produces a Dify YAML that imports cleanly into the same workspace
+- [ ] Chat-to-build agent is created as Draft + Unvetted (must pass gatekeeper before publish)
+
+**Git tag:** `phase-14-complete`
+
+---
+
+### Phase 15 — Builder bridges + comprehensiveness
+
+**Goal:** Make Dify, n8n, Langfuse, and agent-reporting feel like first-class parts of Wekala. Stop sending teammates to four browser tabs.
+
+**Surfaces, in order:**
+1. **"Build in Dify" deep-link** — opens Dify in a new tab, with a return-callback that polls Dify for the new app's YAML and imports it
+2. **Workflows sidebar item** — deep-links to n8n + lists Wekala-registered n8n workflows-as-tools
+3. **Langfuse trace deep-link** — from any audit-log row or invocation row that has a trace_id
+4. **Agent reports** — `POST /v1/bazaar/agents/{id}/reports`; new `agent_reports` table with RLS; admin review queue
+5. **Tool playground** — Workspace → Tools → click any granted tool → form-generated input → run
+
+**Security review checklist:**
+- [ ] All deep-links use trusted hostnames (the existing Docker-network service names); no user-supplied URLs
+- [ ] Agent-report submission rate-limited per user per agent (5/day) to prevent harassment
+- [ ] Reports visible only to the agent-owning workspace admins + Wekala admins; never to other Bazaar users
+- [ ] Report content sanitized (no HTML, length-capped 2KB)
+- [ ] Tool playground respects per-agent whitelist (Phase 5 enforcement)
+- [ ] Tool playground's form-generated inputs validated against the tool's JSON Schema before invocation
+
+**Features:**
+- [ ] "Build in Dify" button on New Agent page → opens Dify, prompts user to click "Done" → polls Dify and auto-imports
+- [ ] Workflows sidebar item with two sections: registered n8n workflows + "Open n8n studio" link
+- [ ] Langfuse deep-link appears next to invocations and audit rows when a trace_id is present
+- [ ] Agent reports table + endpoint + UI ("Report this agent" button on Bazaar agent page)
+- [ ] Admin review queue at `/workspaces/{wid}/reports` for the workspace owning the reported agent
+- [ ] Tool playground page wired to the existing `POST .../tools/{tid}/invoke` endpoint
+
+**Backend changes:**
+- New table `agent_reports` (Phase 15 migration)
+- New endpoints `POST /v1/bazaar/agents/{id}/reports`, `GET /v1/workspaces/{wid}/reports`, `POST /v1/workspaces/{wid}/reports/{rid}/resolve`
+- New audit actions: `agent.report`, `report.resolve`
+
+**OSS tools:** shadcn/ui Sheet, DataTable, Form
+
+**Manual test checklist (per surface):**
+- [ ] "Build in Dify" round-trip: open Dify → make a trivial change → return to Wekala → agent appears as a new Draft
+- [ ] Workflows page lists registered n8n workflows; "Open n8n" opens n8n in a new tab
+- [ ] Langfuse trace deep-link opens the right trace
+- [ ] Report submission rate-limited at 5/day per user per agent
+- [ ] Tool playground refuses to invoke a tool the agent isn't granted
+
+**Git tag:** `phase-15-complete`
 
 ---
 
