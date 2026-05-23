@@ -43,18 +43,19 @@ Visit `/signup`.
 - [ ] Try posting `<script>alert(1)</script>` as full name → submits the literal string; in Supabase the metadata field stores it as plain text (escaped on render, never executed)
 - [ ] Hover Google / Apple buttons → black "Coming soon" tooltip appears above each; clicking does nothing (preventDefault)
 
-## 3. Verify-email — OTP cell behaviour
+## 3. Verify-email — OTP paste-only behaviour
 
 After sign-up you land on `/verify?email=...`. Open MailHog, copy the
 6-digit code from the most recent email.
 
 - [ ] Page renders: W tile + "Check your email" + "We sent a 6-digit code to **test+phase12@example.com**"
 - [ ] Six separated rounded cells (h-14 × w-12, gap-2, neutral-200 border)
+- [ ] Below the cells: hint "Copy the 6-digit code from the email and paste it here."
 - [ ] First cell auto-focused with a blinking caret (1.2s `otp-caret-blink`)
-- [ ] Type first digit → caret advances to cell 2; cell 1 shows the typed digit
-- [ ] Continue typing 4 more digits one at a time → focus advances cell-by-cell
-- [ ] Type the 6th digit → **verification fires automatically without a button click**, spinner + "Verifying…" text appear
-- [ ] On success: cells replaced with green check circle + "Email verified" → toast / auto-redirect to `/login` after 2s
+- [ ] **Typing on the keyboard does NOTHING** — cells stay empty (inputMode="none" + onChange filter rejects single-char additions)
+- [ ] Copy the 6-digit code from MailHog → click any cell → **Cmd/Ctrl+V** → all 6 cells populate at once with the code
+- [ ] **Verification fires automatically without a button click**; spinner + "Verifying…" text appear
+- [ ] On success: cells replaced with green check circle + "Email verified" → auto-redirect to `/login` after 2s
 
 ## 4. Verify-email — failure path (the bug fixed in this phase)
 
@@ -67,12 +68,12 @@ Visit `/verify?email=...` for an unverified user. Type 6 incorrect digits
 - [ ] First cell re-focused with caret
 - [ ] Type a different 6-digit code → fires verification again (single POST, not a loop)
 
-## 5. Verify-email — paste
+## 5. Verify-email — manual typing is blocked
 
-- [ ] Copy a valid 6-digit code from MailHog
-- [ ] Click into the OTP — any cell — and **Cmd/Ctrl+V**
-- [ ] All 6 cells populate at once with the pasted digits
-- [ ] Auto-submission fires immediately
+- [ ] On `/verify?email=...`, focus the first OTP cell
+- [ ] Press any digit key on the keyboard → **nothing happens** (cells stay empty)
+- [ ] Try pressing letters / symbols → also nothing
+- [ ] The only way to fill the cells is via paste (covered in section 3)
 
 ## 6. Sign-in — "Remember me" toggle
 

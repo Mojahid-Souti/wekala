@@ -109,9 +109,17 @@ export function VerifyForm() {
           <InputOTP
             maxLength={OTP_LENGTH}
             value={code}
-            onChange={(v) => setCode(v.replace(/\D/g, ""))}
+            onChange={(v) => {
+              const cleaned = v.replace(/\D/g, "");
+              if (cleaned.length === OTP_LENGTH) {
+                setCode(cleaned);
+              } else if (cleaned.length < code.length) {
+                setCode(cleaned);
+              }
+            }}
             autoFocus
             disabled={loading}
+            inputMode="none"
             aria-label={t("codeLabel")}
           >
             <InputOTPGroup>
@@ -120,6 +128,8 @@ export function VerifyForm() {
               ))}
             </InputOTPGroup>
           </InputOTP>
+
+          <p className="text-xs text-neutral-500">{t("pasteOnly")}</p>
 
           {loading && (
             <div className="flex items-center gap-2 text-sm text-neutral-500">
