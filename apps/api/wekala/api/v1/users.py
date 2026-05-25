@@ -24,7 +24,7 @@ class UserLookupOut(BaseModel):
 @router.get("/lookup", response_model=UserLookupOut)
 async def lookup_user_by_email(
     email: str = Query(..., description="Email address to look up"),
-    _current_user: Annotated[UserResult, Depends(get_current_user)] = None,
+    _current_user: Annotated[UserResult | None, Depends(get_current_user)] = None,
 ) -> UserLookupOut:
     """
     Look up a platform user by email address.

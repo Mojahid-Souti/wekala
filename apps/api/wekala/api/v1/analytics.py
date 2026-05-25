@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import uuid
+from collections.abc import Iterator
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -290,7 +291,7 @@ async def export_audit_log_csv(
         metadata={"kind": "audit_log_csv", "row_count": len(items)},
     )
 
-    def _stream():
+    def _stream() -> Iterator[str]:
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(

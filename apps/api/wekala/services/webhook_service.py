@@ -214,7 +214,7 @@ def verify_signature(secret: str, body: bytes, signature_header: str) -> bool:
 
 def _next_backoff_seconds(attempt_count: int, initial: int) -> int:
     """Geometric: initial * 5^attempt. attempt_count 0..4 -> 1, 5, 25, 125, 625."""
-    return initial * (5**attempt_count)
+    return int(initial * (5**attempt_count))
 
 
 def _resolve_secret_for_subscription(subscription: WebhookSubscription) -> str:

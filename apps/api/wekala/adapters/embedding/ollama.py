@@ -33,6 +33,7 @@ class OllamaEmbeddingAdapter:
                     json={"model": self._model, "prompt": text},
                 )
                 resp.raise_for_status()
-                return resp.json()["embedding"]
+                embedding: list[float] = resp.json()["embedding"]
+                return embedding
 
         return list(await asyncio.gather(*[_embed_one(t) for t in texts]))

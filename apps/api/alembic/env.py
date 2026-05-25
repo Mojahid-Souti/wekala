@@ -14,7 +14,9 @@ if config.config_file_name:
 target_metadata = Base.metadata
 
 
-def include_object(obj: object, name: str, type_: str, reflected: bool, compare_to: object) -> bool:
+def include_object(  # type: ignore[no-untyped-def]  # alembic Callable signature is overly specific
+    obj, name, type_, reflected, compare_to
+) -> bool:
     """Exclude auth-schema objects (Supabase-managed) from Alembic autogenerate."""
     return not (type_ == "table" and hasattr(obj, "schema") and obj.schema == "auth")
 

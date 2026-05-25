@@ -211,7 +211,10 @@ async def list_workspace_tools(
 async def _ensure_agent_in_workspace(
     db: AsyncSession, workspace_id: uuid.UUID, agent_id: uuid.UUID
 ) -> None:
-    agent = await AgentRepository(db).get(agent_id)
+    # get() already filters by workspace_id; the post-fetch check is defence
+    # in depth in case the row exists but is on a different workspace
+    # (shouldn't happen — the index is unique).
+    agent = await AgentRepository(db).get(agent_id, workspace_id)
     if not agent or agent.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 

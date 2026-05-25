@@ -55,4 +55,4 @@ class SupabaseStorageAdapter:
                 headers=self._headers,
             )
             resp.raise_for_status()
-            return resp.json()["signedURL"]
+            return str(resp.json()["signedURL"])

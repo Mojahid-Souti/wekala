@@ -59,7 +59,7 @@ def _resolve_all(hostname: str) -> list[str]:
     Raises socket.gaierror if hostname doesn't resolve.
     """
     infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
-    return list({info[4][0] for info in infos})
+    return list({str(info[4][0]) for info in infos})
 
 
 async def validate_external_url(url: str, *, allow_hostnames: frozenset[str] | None = None) -> str:

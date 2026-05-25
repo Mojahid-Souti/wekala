@@ -7,6 +7,7 @@ tenant isolation alongside RLS.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,7 +80,7 @@ class ToolRepository:
         workspace_id: uuid.UUID,
         name: str,
         description: str,
-        input_schema: dict,
+        input_schema: dict[str, Any],
     ) -> Tool:
         """Upsert by (mcp_server_id, name). Used by discovery refresh."""
         result = await self._db.execute(

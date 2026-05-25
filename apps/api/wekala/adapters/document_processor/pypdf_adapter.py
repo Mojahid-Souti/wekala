@@ -69,7 +69,7 @@ class PypdfAdapter:
             if not images:
                 return ""
             img = Image.open(io.BytesIO(images[0].data))
-            return pytesseract.image_to_string(img, lang="eng")
+            return str(pytesseract.image_to_string(img, lang="eng"))
         except Exception as exc:  # noqa: BLE001
             logger.warning("OCR unavailable: %s", exc)
             return ""

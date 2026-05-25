@@ -108,7 +108,10 @@ class PublicInvocationService:
         start = time.perf_counter()
         outcome = Outcome.SUCCESS
         try:
-            result = await self._runtime.invoke(agent, query)
+            # TODO(phase-7-sdk): AgentRuntime protocol currently only exposes
+            # invoke_sandbox; production invoke() needs to be added to the
+            # protocol + DifyAdapter.
+            result = await self._runtime.invoke(agent, query)  # type: ignore[attr-defined]
             answer = str(result.get("answer", ""))
             usage = dict(result.get("usage", {}))
         except Exception as exc:  # noqa: BLE001 — translate to 502, record audit, re-raise

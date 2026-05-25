@@ -18,6 +18,7 @@ import hashlib
 import json
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -49,7 +50,11 @@ class ToolService:
         self,
         db: AsyncSession,
         *,
-        mcp_client_factory: type[MCPClient] = HTTPMCPClient,  # type: ignore[assignment]
+        # Callable rather than type[MCPClient] — Protocol classes can't be
+        # instantiated, so mypy treats type[Protocol] as having no constructor.
+        # A Callable[[str], MCPClient] expresses "give me a URL, I'll give
+        # you a client" which is what we actually want.
+        mcp_client_factory: Callable[[str], MCPClient] = HTTPMCPClient,
         builtin_hostnames: frozenset[str] | None = None,
     ) -> None:
         self._db = db

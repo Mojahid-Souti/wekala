@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,7 +69,7 @@ class VettingRepository:
         run: VettingRun,
         *,
         outcome: str,
-        finding_summary: dict,
+        finding_summary: dict[str, Any],
     ) -> VettingRun:
         run.status = "completed"
         run.outcome = outcome
@@ -104,7 +105,7 @@ class VettingRepository:
         *,
         run_id: uuid.UUID,
         workspace_id: uuid.UUID,
-        findings: list,
+        findings: list[Any],
     ) -> int:
         """Bulk-insert findings. Returns count written. O(k) inserts."""
         rows = [
@@ -136,5 +137,5 @@ class VettingRepository:
         items = list(result.scalars().all())
         if not include_full:
             for f in items:
-                f.matched_full = None  # type: ignore[assignment]
+                f.matched_full = None
         return items

@@ -18,6 +18,7 @@ from collections import Counter
 from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.scanner.base import AgentScanner, Finding, ScanInput
 from wekala.adapters.scanner.pii import PIIScanner
@@ -90,7 +91,7 @@ def _max_severity_in_summary(summary: dict[str, Any] | None) -> int:
 class VettingService:
     def __init__(
         self,
-        db_session,
+        db_session: AsyncSession,
         *,
         scanners: list[AgentScanner] | None = None,
         policy: ClassificationPolicy | None = None,
@@ -286,7 +287,7 @@ async def _run_scan_in_background(run_id: uuid.UUID, agent_id: uuid.UUID) -> Non
             await _mark_failed(session, run_id, agent_id, str(e))
 
 
-async def _execute_scan(session, run_id: uuid.UUID, agent_id: uuid.UUID) -> None:
+async def _execute_scan(session: AsyncSession, run_id: uuid.UUID, agent_id: uuid.UUID) -> None:
     vetting_repo = VettingRepository(session)
     agent_repo = AgentRepository(session)
     audit_repo = AuditRepository(session)
@@ -367,7 +368,9 @@ async def _execute_scan(session, run_id: uuid.UUID, agent_id: uuid.UUID) -> None
     )
 
 
-async def _mark_failed(session, run_id: uuid.UUID, agent_id: uuid.UUID, err: str) -> None:
+async def _mark_failed(
+    session: AsyncSession, run_id: uuid.UUID, agent_id: uuid.UUID, err: str
+) -> None:
     vetting_repo = VettingRepository(session)
     agent_repo = AgentRepository(session)
     run = await vetting_repo.get_run(run_id)

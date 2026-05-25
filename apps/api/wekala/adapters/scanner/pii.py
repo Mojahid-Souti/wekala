@@ -14,7 +14,7 @@ Why deterministic regex first (vs. Presidio NlpEngine):
 from __future__ import annotations
 
 import re
-from typing import Final
+from typing import Any, Final
 
 from .base import AgentScanner, Finding, ScanInput
 from .recognizers.oman import ALL_RECOGNIZERS
@@ -28,7 +28,7 @@ CONTEXT_WIDTH: Final[int] = 40
 class PIIScanner(AgentScanner):
     name = "pii"
 
-    def __init__(self, recognizers: tuple = ALL_RECOGNIZERS) -> None:
+    def __init__(self, recognizers: tuple[Any, ...] = ALL_RECOGNIZERS) -> None:
         self._recognizers = recognizers
 
     async def scan(self, agent_input: ScanInput) -> list[Finding]:

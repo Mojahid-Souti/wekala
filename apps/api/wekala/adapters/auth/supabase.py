@@ -1,11 +1,12 @@
 import uuid
+from typing import Any
 
 import httpx
 
 from wekala.adapters.auth.base import AuthService, SessionResult, UserResult
 
 
-def _parse_user(data: dict) -> UserResult:  # type: ignore[type-arg]
+def _parse_user(data: dict[str, Any]) -> UserResult:
     return UserResult(
         id=uuid.UUID(data["id"]),
         email=data["email"],
@@ -34,7 +35,7 @@ class SupabaseAuthAdapter:
         )
 
     async def sign_up(self, email: str, password: str, full_name: str | None = None) -> UserResult:
-        payload: dict = {"email": email, "password": password}
+        payload: dict[str, Any] = {"email": email, "password": password}
         if full_name:
             payload["data"] = {"full_name": full_name}
         r = await self._client.post("/signup", json=payload)

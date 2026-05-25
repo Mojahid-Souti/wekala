@@ -5,6 +5,10 @@ description = "Wekala platform API — sovereign AI agent marketplace"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
+    # Pin starlette explicitly to dodge PYSEC-2026-161 in 1.0.0 (the version
+    # the current fastapi pulls in transitively). Drop the pin once fastapi's
+    # own range moves past it.
+    "starlette>=1.0.1",
     "uvicorn[standard]>=0.32",
     "pydantic[email]>=2.10",
     "pydantic-settings>=2.7",
@@ -30,6 +34,8 @@ dependencies = [
     "lxml>=5.3",
     # Phase 5 — Tools, MCP & integrations
     "jsonschema>=4.23",
+    # Phase B multi-tenancy — Fernet at-rest encryption for stored n8n passwords.
+    "cryptography>=44.0",
 ]
 
 [dependency-groups]
@@ -43,6 +49,7 @@ dev = [
     "sqlalchemy[mypy]>=2.0",
     "types-python-jose>=3.3",
     "types-PyYAML>=6.0",
+    "types-jsonschema>=4.23",
 ]
 
 [build-system]
@@ -67,6 +74,9 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 python_version = "3.13"
 strict = true
 plugins = ["sqlalchemy.ext.mypy.plugin"]
+# Test files use untyped fixtures + monkeypatch heavily — strict mode there
+# costs more than it earns. Source code stays under strict.
+exclude = ["^tests/"]
 
 [[tool.mypy.overrides]]
 module = [
