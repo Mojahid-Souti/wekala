@@ -2,6 +2,7 @@
 
 export const dynamic = "force-dynamic";
 import { api } from "@/lib/api";
+import { getToken } from "@/lib/auth-storage";
 import { ROUTES } from "@/lib/constants";
 import { useToast } from "@/lib/toast";
 import { useTranslations } from "next-intl";
@@ -22,8 +23,7 @@ export default function NewWorkspacePage() {
     setError("");
     setLoading(true);
     try {
-      const token = sessionStorage.getItem("access_token") ?? "";
-      const ws = await api.workspaces.create(name, description, token);
+      const ws = await api.workspaces.create(name, description, getToken());
       toast(t("successMessage", { name: ws.name }), "success");
       router.push(ROUTES.workspace(ws.id));
     } catch (err) {

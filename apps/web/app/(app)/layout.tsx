@@ -1,40 +1,47 @@
-import { AuthGuard } from "@/components/auth/auth-guard";
-import { LogoutButton } from "@/components/auth/logout-button";
-import { ROUTES } from "@/lib/constants";
-import { ToastProvider } from "@/lib/toast";
-import { getTranslations } from "next-intl/server";
-import Link from "next/link";
+"use client";
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const t = await getTranslations("nav");
+import { AppHeader } from "@/components/app/app-header";
+import { AppSidebar } from "@/components/app/app-sidebar";
+import { CommandPaletteProvider } from "@/components/app/command-palette";
+import { SidebarProvider, useSidebar } from "@/components/app/sidebar-context";
+import { WalkthroughProvider } from "@/components/app/walkthrough";
+import { WorkspaceProvider } from "@/components/app/workspace-context";
+import { AuthGuard } from "@/components/auth/auth-guard";
+import { ToastProvider } from "@/lib/toast";
+import { cn } from "@/lib/utils";
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
       <AuthGuard>
-        <div className="flex min-h-screen flex-col">
-          <header className="border-b bg-white px-6 py-4">
-            <div className="flex items-center justify-between gap-6">
-              <div className="flex items-center gap-6">
-                <Link
-                  href={ROUTES.dashboard}
-                  className="text-lg font-bold tracking-tight text-gray-900 hover:text-indigo-600"
-                >
-                  Wekala
-                </Link>
-                <nav className="flex gap-4 text-sm text-gray-600">
-                  <Link href={ROUTES.dashboard} className="hover:text-gray-900">
-                    {t("dashboard")}
-                  </Link>
-                  <Link href={ROUTES.bazaar} className="hover:text-gray-900">
-                    {t("bazaar")}
-                  </Link>
-                </nav>
-              </div>
-              <LogoutButton label={t("signOut")} />
-            </div>
-          </header>
-          <main className="flex-1">{children}</main>
-        </div>
+        <WorkspaceProvider>
+          <SidebarProvider>
+            <CommandPaletteProvider>
+              <WalkthroughProvider>
+                <Shell>{children}</Shell>
+              </WalkthroughProvider>
+            </CommandPaletteProvider>
+          </SidebarProvider>
+        </WorkspaceProvider>
       </AuthGuard>
     </ToastProvider>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  const { collapsed } = useSidebar();
+  return (
+    <div className="min-h-screen bg-white">
+      <AppSidebar />
+      <div
+        className={cn(
+          "flex min-h-screen flex-col transition-[margin-left] duration-300 ease-in-out",
+          collapsed ? "ml-[64px]" : "ml-[256px]"
+        )}
+      >
+        <AppHeader />
+        <main className="flex-1">{children}</main>
+      </div>
+    </div>
   );
 }

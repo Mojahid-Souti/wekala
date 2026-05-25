@@ -105,6 +105,15 @@ const config: Config = {
           "0%, 70%, 100%": { opacity: "1" },
           "20%, 50%": { opacity: "0" },
         },
+        "spotlight-pulse": {
+          "0%": { transform: "scale(1)", opacity: "0.9" },
+          "100%": { transform: "scale(1.25)", opacity: "0" },
+        },
+        "spotlight-ripple": {
+          "0%": { transform: "scale(1)", opacity: "0.7" },
+          "70%": { opacity: "0.2" },
+          "100%": { transform: "scale(1.35)", opacity: "0" },
+        },
       },
       animation: {
         "mockup-scene-1": "mockup-scene-1 18s ease-in-out infinite",
@@ -117,6 +126,8 @@ const config: Config = {
         "auth-flip-in": "auth-flip-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both",
         "auth-fade-in": "auth-fade-in 200ms ease-out both",
         "otp-caret-blink": "otp-caret-blink 1.2s ease-in-out infinite",
+        "spotlight-pulse": "spotlight-pulse 1.6s cubic-bezier(0, 0, 0.2, 1) infinite",
+        "spotlight-ripple": "spotlight-ripple 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
       },
     },
   },

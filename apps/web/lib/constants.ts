@@ -11,6 +11,9 @@ export const ROUTES = {
   workspaceMembers: (workspaceId: string) => `/workspaces/${workspaceId}/members`,
   agents: (workspaceId: string) => `/workspaces/${workspaceId}/agents`,
   newAgent: (workspaceId: string) => `/workspaces/${workspaceId}/agents/new`,
+  agentsBuild: (workspaceId: string) => `/workspaces/${workspaceId}/agents/build`,
+  agentsTemplates: (workspaceId: string) => `/workspaces/${workspaceId}/agents/templates`,
+  agentsImport: (workspaceId: string) => `/workspaces/${workspaceId}/agents/import`,
   agentDetail: (workspaceId: string, agentId: string) =>
     `/workspaces/${workspaceId}/agents/${agentId}`,
   agentVetting: (workspaceId: string, agentId: string) =>

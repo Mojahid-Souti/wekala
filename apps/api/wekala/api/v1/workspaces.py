@@ -112,8 +112,23 @@ async def list_workspaces(
     current_user: Annotated[UserResult, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[WorkspaceOut]:
+    """List workspaces the caller is a member of.
+
+    First-use bootstrap: if the user has zero workspaces, auto-create one
+    named after their email username (e.g. "test's workspace") so the home
+    page never renders an empty-workspace state.
+    """
     repo = WorkspaceRepository(db)
     workspaces = await repo.list_for_user(current_user.id)
+    if not workspaces:
+        username = current_user.email.split("@", 1)[0] or "your"
+        svc = WorkspaceService(db)
+        ws = await svc.create(
+            name=f"{username}'s workspace",
+            owner_id=current_user.id,
+            description="",
+        )
+        workspaces = [ws]
     return [WorkspaceOut.from_model(ws) for ws in workspaces]
 
 
