@@ -6,6 +6,7 @@ from wekala.api.v1 import (
     auth,
     bazaar,
     knowledge_base,
+    n8n,
     public,
     tools,
     users,
@@ -28,3 +29,5 @@ router.include_router(public.router)
 router.include_router(webhooks.router)
 # Phase 8
 router.include_router(analytics.router)
+# Phase B multi-tenancy — n8n session bridge
+router.include_router(n8n.router)

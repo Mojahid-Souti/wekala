@@ -22,6 +22,10 @@ __pycache__/
 *.so
 .Python
 build/
+# The Next.js route at apps/web/app/(app)/workspaces/[workspaceId]/agents/build/
+# is NOT a Python build artifact — it's the agent-canvas page. Negate the
+# generic build/ rule for that specific route folder.
+!apps/web/app/**/agents/build/
 develop-eggs/
 dist/
 downloads/

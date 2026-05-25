@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     # Docker-network sidecars (wekala-mcp-*) registered as built-in tools.
     mcp_builtin_hostnames: str = ""
 
+    # Phase B multi-tenancy — Wekala→n8n auth bridge
+    n8n_internal_url: str = "http://wekala-n8n:5678"
+    # Passthrough for direct JWT mint (unused — we use the login endpoint).
+    n8n_user_management_jwt_secret: str = ""
+    wekala_n8n_owner_email: str = "n8n-owner@wekala.local"
+    wekala_n8n_owner_password: str = ""  # required at runtime; bootstrap fails loudly if missing
+    wekala_n8n_owner_first_name: str = "Wekala"
+    wekala_n8n_owner_last_name: str = "System"
+    # Fernet key — required for storing per-user n8n passwords at rest.
+    wekala_field_encryption_key: str = ""
+
     # Developer SDK & API (Phase 7)
     # Per-key sliding-window limits. Defaults match the CLAUDE.md plan.
     api_rate_limit_per_minute: int = 60

@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.auth.base import AuthService, UserResult
 from wekala.adapters.auth.supabase import SupabaseAuthAdapter
+from wekala.adapters.n8n.base import N8nService
+from wekala.adapters.n8n.rest import N8nRestAdapter
 from wekala.core.config import settings
 from wekala.core.constants import Action, Role
 from wekala.db.repositories.membership import MembershipRepository
@@ -22,6 +24,10 @@ def get_auth_service() -> AuthService:
         base_url=str(settings.wekala_supabase_url),
         service_key=settings.wekala_supabase_service_key,
     )
+
+
+def get_n8n_service() -> N8nService:
+    return N8nRestAdapter(base_url=settings.n8n_internal_url)
 
 
 async def get_current_user(

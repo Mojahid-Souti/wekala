@@ -733,3 +733,33 @@ class AnomalyAlert(Base):
         "alert_metadata", JSONB, nullable=False, default=dict
     )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+# =============================================================================
+# Phase B multi-tenancy — Wekala↔n8n user mapping
+# =============================================================================
+
+
+class N8nUserLink(Base):
+    """One-to-one mapping from a Supabase user to a private n8n user.
+
+    Created on first canvas access by services/n8n_provisioning.py. The
+    n8n_password_encrypted column is Fernet-encrypted with
+    WEKALA_FIELD_ENCRYPTION_KEY so a DB leak doesn't expose plaintext n8n
+    passwords. Plaintext passwords are never logged.
+    """
+
+    __tablename__ = "n8n_user_links"
+
+    supabase_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("auth.users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    n8n_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True)
+    n8n_email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    n8n_password_encrypted: Mapped[bytes] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )

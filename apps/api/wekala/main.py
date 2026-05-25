@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from wekala.api.v1.router import router
 from wekala.core.config import settings
 from wekala.db.session import AsyncSessionLocal
+from wekala.services import n8n_provisioning
 from wekala.services.webhook_service import worker as webhook_worker
 
 log = structlog.get_logger()
@@ -53,13 +54,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     webhook_worker.start()
     mv_stop = asyncio.Event()
     mv_task = asyncio.create_task(_mv_refresh_loop(mv_stop), name="mv-refresh-worker")
+    # Phase B multi-tenancy — make sure n8n has an owner the first time we boot.
+    # Background-fired so a slow n8n start doesn't block the API healthcheck.
+    n8n_bootstrap_task = asyncio.create_task(
+        n8n_provisioning.bootstrap_owner_with_retry(n8n_provisioning.make_n8n_service()),
+        name="n8n-owner-bootstrap",
+    )
     try:
         yield
     finally:
         mv_stop.set()
         mv_task.cancel()
+        n8n_bootstrap_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await mv_task
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await n8n_bootstrap_task
         await webhook_worker.stop()
         log.info("wekala_api.shutdown")
 
