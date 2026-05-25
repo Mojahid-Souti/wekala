@@ -59,8 +59,14 @@ pull-images: ## Pull all service images sequentially (avoids CDN EOF on parallel
 	done
 	@echo "  $(GREEN)✓$(RESET) All images pulled — run 'make up'"
 
+.PHONY: build-n8n-nodes
+build-n8n-nodes: ## Build the n8n-nodes-wekala custom node package
+	@command -v npm >/dev/null 2>&1 || { echo "npm required (Node 24 via mise)"; exit 1; }
+	@cd packages/n8n-nodes-wekala && npm install --no-audit --no-fund --silent && npm run build
+	@echo "  $(GREEN)✓$(RESET) n8n-nodes-wekala built — restart n8n with 'make restart-svc SVC=n8n'"
+
 .PHONY: up
-up: ## Start the full stack (detached)
+up: build-n8n-nodes ## Start the full stack (detached)
 	$(COMPOSE) up -d
 	@echo ""
 	@echo "  $(GREEN)Stack is up. Services:$(RESET)"

@@ -1,0 +1,11 @@
+{
+  "node": "wekalaDeepseekR1",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["AI"],
+  "subcategories": {
+    "AI": ["Language Models", "Root Nodes"],
+    "Language Models": ["Chat Models (Recommended)"]
+  },
+  "resources": {}
+}

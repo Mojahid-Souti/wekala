@@ -1,0 +1,34 @@
+{
+  "name": "n8n-nodes-wekala",
+  "version": "0.1.0",
+  "description": "Wekala-branded local-only LLM nodes for n8n. All inference stays on Ollama.",
+  "license": "MIT",
+  "private": true,
+  "keywords": ["n8n-community-node-package"],
+  "scripts": {
+    "build": "tsc && node copy-icons.js",
+    "dev": "tsc --watch"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "nodes": [
+      "dist/WekalaQwen35_2b/WekalaQwen35_2b.node.js",
+      "dist/WekalaQwen35_4b/WekalaQwen35_4b.node.js",
+      "dist/WekalaLlama32/WekalaLlama32.node.js",
+      "dist/WekalaPhi4Mini/WekalaPhi4Mini.node.js",
+      "dist/WekalaGlm4/WekalaGlm4.node.js",
+      "dist/WekalaDeepseekR1/WekalaDeepseekR1.node.js",
+      "dist/WekalaGemma4/WekalaGemma4.node.js",
+      "dist/WekalaAyaExpanse/WekalaAyaExpanse.node.js",
+      "dist/WekalaBgeM3/WekalaBgeM3.node.js"
+    ]
+  },
+  "dependencies": {
+    "@langchain/ollama": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "n8n-workflow": "*",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "node": "wekalaBgeM3",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["AI"],
+  "subcategories": {
+    "AI": ["Embeddings", "Root Nodes"]
+  },
+  "resources": {}
+}
