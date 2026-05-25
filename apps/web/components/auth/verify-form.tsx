@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  AUTH_BROADCAST_CHANNEL,
+  EMAIL_CONFIRMED_EVENT,
+} from "@/components/auth/email-confirmation-broadcaster";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { ROUTES } from "@/lib/constants";
@@ -61,6 +65,31 @@ export function VerifyForm() {
       void verify(code);
     }
   }, [code, loading, done, verify]);
+
+  // Cross-tab sync: if the user clicked the confirmation link in their email
+  // (which opens another tab), the broadcaster on the auth layout fires
+  // EMAIL_CONFIRMED_EVENT. Transition this tab to "done" instead of leaving
+  // it sitting on the OTP screen forever.
+  useEffect(() => {
+    if (typeof window === "undefined" || done) return;
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL);
+    } catch {
+      return; // BroadcastChannel unsupported
+    }
+    const handler = (ev: MessageEvent<{ type?: string }>) => {
+      if (ev.data?.type !== EMAIL_CONFIRMED_EVENT) return;
+      setDone(true);
+      // Match the manual-OTP path: brief success state, then to login.
+      setTimeout(() => router.push(ROUTES.login), 2000);
+    };
+    channel.addEventListener("message", handler);
+    return () => {
+      channel?.removeEventListener("message", handler);
+      channel?.close();
+    };
+  }, [done, router]);
 
   if (done) {
     return (
