@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useWorkspaces } from "@/components/app/workspace-context";
 import { type AgentOut, api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
+import { getFirstNameFromToken } from "@/lib/jwt-user";
 import { useToken } from "@/lib/use-token";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -72,7 +73,10 @@ export default function HomePage() {
   const showKpis = !!kpis && (kpis.invocations > 0 || kpis.active_agents > 0);
   const hasActivity = (auditLog?.items.length ?? 0) > 0;
 
-  const displayName = me?.email.split("@")[0] ?? "there";
+  // Prefer the user's real first name (set at signup, stored in Supabase
+  // user_metadata.full_name and carried in the JWT). Fall back to the
+  // email local-part only when no name is on file.
+  const displayName = getFirstNameFromToken(token) ?? me?.email.split("@")[0] ?? "there";
   const greeting = getGreeting();
   const isFirstTime = !hasAgents && !hasActivity;
 
