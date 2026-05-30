@@ -1,9 +1,19 @@
 app:
-  name: "Customer Support Agent"
-  description: "A polished customer support agent that answers questions clearly and escalates issues."
+  name: "Test template"
+  description: "Placeholder while the curated template library is assembled. Removed once real templates ship."
   mode: chat
-  icon: "🤝"
-  icon_background: "#E8F4FD"
+  icon: "🧪"
+  icon_background: "#F5F5F5"
+
+# Wekala-side gallery metadata (not consumed by Dify).
+wekala_metadata:
+  category: "Test"
+  classification: "Internal"
+  connectors: []
+  tags: ["placeholder", "test"]
+  use_count: 0
+  featured: false
+  icon_name: "Sparkles"
 
 model:
   provider: ollama

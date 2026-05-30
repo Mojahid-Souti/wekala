@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import yaml
 from fastapi import (
@@ -44,9 +44,9 @@ _YAML_MAX_BYTES = 1_048_576  # 1 MiB — also enforced in yaml_validator but che
 # ---------------------------------------------------------------------------
 
 
-def _load_templates() -> dict[str, dict]:  # type: ignore[type-arg]
+def _load_templates() -> dict[str, dict[str, Any]]:
     """Load all YAML files from the templates/ directory. O(t) where t = template count."""
-    templates: dict[str, dict] = {}  # type: ignore[type-arg]
+    templates: dict[str, dict[str, Any]] = {}
     templates_dir = Path(__file__).parent.parent.parent / "templates"
     if not templates_dir.is_dir():
         return templates
@@ -55,10 +55,24 @@ def _load_templates() -> dict[str, dict]:  # type: ignore[type-arg]
             with path.open("rb") as f:
                 dsl = yaml.safe_load(f)
             template_id = path.stem
+            app = dsl.get("app", {}) or {}
+            # `wekala_metadata` is a Wekala-side block — Dify ignores unknown
+            # top-level keys, so it travels with the YAML without polluting it.
+            meta = dsl.get("wekala_metadata", {}) or {}
             templates[template_id] = {
                 "id": template_id,
-                "name": dsl.get("app", {}).get("name", template_id),
-                "description": dsl.get("app", {}).get("description", ""),
+                "name": app.get("name", template_id),
+                "description": app.get("description", ""),
+                "icon_emoji": app.get("icon", ""),
+                "icon_background": app.get("icon_background", "#F5F5F5"),
+                "icon_name": meta.get("icon_name", "Sparkles"),
+                "category": meta.get("category", "Other"),
+                "classification": meta.get("classification", "Internal"),
+                "connectors": list(meta.get("connectors", [])),
+                "tags": list(meta.get("tags", [])),
+                "use_count": int(meta.get("use_count", 0)),
+                "featured": bool(meta.get("featured", False)),
+                "sample_prompts": list(dsl.get("suggested_questions", []) or []),
                 "dsl": dsl,
             }
         except Exception:
@@ -66,7 +80,7 @@ def _load_templates() -> dict[str, dict]:  # type: ignore[type-arg]
     return templates
 
 
-_TEMPLATES: dict[str, dict] = _load_templates()  # type: ignore[type-arg]
+_TEMPLATES: dict[str, dict[str, Any]] = _load_templates()
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +177,16 @@ class TemplateOut(BaseModel):
     id: str
     name: str
     description: str
+    icon_emoji: str = ""
+    icon_background: str = "#F5F5F5"
+    icon_name: str = "Sparkles"
+    category: str = "Other"
+    classification: str = "Internal"
+    connectors: list[str] = []
+    tags: list[str] = []
+    use_count: int = 0
+    featured: bool = False
+    sample_prompts: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +422,39 @@ async def transfer_agent(
     return AgentOut.from_orm(agent)
 
 
+class AgentYamlOut(BaseModel):
+    yaml: str
+    version: int
+
+
+@router.get(
+    "/workspaces/{workspace_id}/agents/{agent_id}/yaml",
+    response_model=AgentYamlOut,
+)
+async def get_agent_yaml(
+    workspace_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.VIEWER))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    agent: Annotated[Agent, Depends(_get_agent)],
+) -> AgentYamlOut:
+    """Return the agent's current-version DSL serialized as YAML.
+
+    Used by the vetting page to show the source-of-truth alongside findings.
+    O(1) — single DB lookup + in-memory yaml.safe_dump.
+    """
+    repo = AgentVersionRepository(db)
+    versions = await repo.list(agent_id, page=1, size=1)
+    if not versions:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent has no versions yet",
+        )
+    head = versions[0]
+    yaml_text = yaml.safe_dump(head.dify_dsl, default_flow_style=False, sort_keys=False)
+    return AgentYamlOut(yaml=yaml_text, version=head.version_num)
+
+
 @router.get(
     "/workspaces/{workspace_id}/agents/{agent_id}/versions",
     response_model=list[AgentVersionOut],
@@ -460,8 +517,22 @@ async def test_agent(
 async def list_templates(
     current_user: Annotated[UserResult, Depends(get_current_user)],
 ) -> list[TemplateOut]:
-    """List built-in agent templates. O(t) where t = template count."""
+    """List built-in agent templates with gallery metadata. O(t)."""
     return [
-        TemplateOut(id=t["id"], name=t["name"], description=t["description"])
+        TemplateOut(
+            id=t["id"],
+            name=t["name"],
+            description=t["description"],
+            icon_emoji=t["icon_emoji"],
+            icon_background=t["icon_background"],
+            icon_name=t["icon_name"],
+            category=t["category"],
+            classification=t["classification"],
+            connectors=t["connectors"],
+            tags=t["tags"],
+            use_count=t["use_count"],
+            featured=t["featured"],
+            sample_prompts=t["sample_prompts"],
+        )
         for t in _TEMPLATES.values()
     ]

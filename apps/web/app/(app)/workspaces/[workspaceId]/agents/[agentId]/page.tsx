@@ -76,105 +76,146 @@ export default function AgentDetailPage({ params }: Props) {
   }
 
   if (isLoading) {
-    return <div className="h-64 animate-pulse rounded-lg bg-gray-100" />;
+    return (
+      <div className="mx-auto max-w-4xl space-y-4 px-5 py-6">
+        <div className="h-8 w-1/3 animate-pulse rounded bg-neutral-100" />
+        <div className="h-4 w-2/3 animate-pulse rounded bg-neutral-100" />
+        <div className="h-40 animate-pulse rounded-xl bg-neutral-50" />
+      </div>
+    );
   }
 
   if (!agent) {
-    return <p className="text-sm text-gray-500">Agent not found.</p>;
+    return (
+      <div className="mx-auto max-w-4xl px-5 py-12 text-center">
+        <p className="text-sm text-neutral-500">Agent not found.</p>
+        <Link
+          href={ROUTES.agents(workspaceId)}
+          className="mt-3 inline-flex h-9 items-center rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:border-neutral-400"
+        >
+          ← Back to agents
+        </Link>
+      </div>
+    );
   }
 
+  const canPublish =
+    (agent.status === "draft" || agent.status === "in_review") &&
+    agent.vetting_status === "approved";
+
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-4xl space-y-7 px-5 py-6 lg:px-7">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{agent.name}</h1>
-          {agent.description && <p className="mt-1 text-sm text-gray-500">{agent.description}</p>}
-          <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
-            <AgentStatusBadge status={agent.status} />
-            <VettingStatusBadge status={agent.vetting_status} />
-            <span>
-              {t("version")} {agent.version}
-            </span>
-            <span>·</span>
-            <span>{agent.classification}</span>
+      <header className="space-y-3">
+        <Link
+          href={ROUTES.agents(workspaceId)}
+          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900"
+        >
+          ← Agents
+        </Link>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1.5">
+            <h1 className="truncate text-2xl font-semibold tracking-tight text-neutral-950">
+              {agent.name}
+            </h1>
+            {agent.description && <p className="text-sm text-neutral-500">{agent.description}</p>}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+              <AgentStatusBadge status={agent.status} />
+              <VettingStatusBadge status={agent.vetting_status} />
+              <span>
+                {t("version")} {agent.version}
+              </span>
+              <span aria-hidden>·</span>
+              <span>{agent.classification}</span>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={ROUTES.agentVetting(workspaceId, agentId)}
-            className="rounded-md border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Review &amp; vet
-          </Link>
-          {(agent.status === "draft" || agent.status === "in_review") &&
-            agent.vetting_status === "approved" && (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {canPublish && (
               <button
                 type="button"
                 onClick={() => publishMutation.mutate()}
                 disabled={publishMutation.isPending}
-                className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                className="inline-flex h-8 items-center rounded-md bg-neutral-950 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
               >
                 {t("publishButton")}
               </button>
             )}
-          {agent.status !== "archived" && (
+            <Link
+              href={ROUTES.agentVetting(workspaceId, agentId)}
+              className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:border-neutral-400"
+            >
+              Review &amp; vet
+            </Link>
+            {agent.status !== "archived" && (
+              <button
+                type="button"
+                onClick={() => archiveMutation.mutate()}
+                disabled={archiveMutation.isPending}
+                className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
+              >
+                {t("archiveButton")}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => archiveMutation.mutate()}
-              disabled={archiveMutation.isPending}
-              className="rounded-md border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => cloneMutation.mutate()}
+              disabled={cloneMutation.isPending}
+              className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
             >
-              {t("archiveButton")}
+              {t("cloneButton")}
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => cloneMutation.mutate()}
-            disabled={cloneMutation.isPending}
-            className="rounded-md border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {t("cloneButton")}
-          </button>
+          </div>
         </div>
-      </div>
+      </header>
 
       {/* Sandbox test panel */}
-      <section className="rounded-lg border bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold text-gray-800">{t("testButton")}</h2>
-        <form onSubmit={handleTest} className="flex gap-2">
+      <section className="rounded-xl border border-neutral-200 bg-white p-5">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          {t("testButton")}
+        </h2>
+        <form onSubmit={handleTest} className="mt-3 flex gap-2">
           <input
             type="text"
             value={testQuery}
             onChange={(e) => setTestQuery(e.target.value)}
             placeholder={t("testPlaceholder")}
-            className="flex-1 rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 rounded-md border border-neutral-200 px-3 py-2 text-sm placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none"
           />
           <button
             type="submit"
             disabled={!testQuery.trim()}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="inline-flex h-9 min-w-[88px] items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
           >
             {t("testSendButton")}
           </button>
         </form>
-        {testError && <p className="mt-2 text-xs text-red-600">{testError}</p>}
+        {testError && (
+          <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {testError}
+          </p>
+        )}
         {testResponse !== null && (
-          <div className="mt-3 rounded-md bg-gray-50 p-3">
-            <p className="mb-1 text-xs font-medium text-gray-500">{t("testResponseLabel")}</p>
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">{testResponse}</p>
+          <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-neutral-500">
+              {t("testResponseLabel")}
+            </p>
+            <p className="whitespace-pre-wrap text-sm text-neutral-800">{testResponse}</p>
           </div>
         )}
       </section>
 
       {/* Version history */}
-      <section>
-        <h2 className="mb-3 text-sm font-semibold text-gray-800">{t("versionsTitle")}</h2>
-        <VersionList
-          versions={versions ?? []}
-          onRollback={(vn) => rollbackMutation.mutate(vn)}
-          isRollingBack={rollbackMutation.isPending}
-        />
+      <section className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          {t("versionsTitle")}
+        </h2>
+        <div className="rounded-xl border border-neutral-200 bg-white">
+          <VersionList
+            versions={versions ?? []}
+            onRollback={(vn) => rollbackMutation.mutate(vn)}
+            isRollingBack={rollbackMutation.isPending}
+          />
+        </div>
       </section>
     </div>
   );
