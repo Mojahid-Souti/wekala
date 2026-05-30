@@ -380,6 +380,8 @@ Each phase below is a unit of work. Follow Rules 1–10 strictly. Each phase end
 
 **Execution order (added post-Phase 8):** Phases 11–15 (UI redesign + builder bridges) execute before Phases 9 (Voice) and 10 (Localization). Numbering stays append-only so tags don't shift. Within Phases 11–15, the *unit of approval is a page*, not a phase: each page goes design → user confirms → implementation → next page. Git tags still happen at phase boundaries.
 
+**Phase 16 (capstone, added post-Phase 15):** SILA — the conversational platform concierge — runs *after* Phase 9 (Voice) and fuses voice + chat-to-build + platform orchestration into one experience. Build order is text-first, voice-after. It is the last phase. Full execution order: 0–8 ✓ → 11 → 12 → 13 → 14 → 15 → 9 → 10 → 16.
+
 ---
 
 ### Phase 0 — Foundation & ground rules
@@ -728,6 +730,13 @@ Each phase below is a unit of work. Follow Rules 1–10 strictly. Each phase end
 - [ ] Tool execution exceeding 30s timeout → killed; logged; agent receives timeout error
 
 **Git tag:** `phase-5-complete`
+
+#### MCP authentication (added post-Phase 5)
+
+Real-world MCP servers need auth. Two tiers:
+
+- **Tier 1 — static token / API key (shipped).** Optional bearer token / API key per MCP server, sent as a header (default `Authorization: Bearer <token>`) on every request. Stored **Fernet-encrypted at rest** (`core/security/field_crypto.py`, shared with n8n password storage); never returned to the client (API exposes only `has_auth: bool`). Unlocks Hugging Face and any token/API-key server. Streamable-HTTP transport in `adapters/mcp/http_client.py` (initialize → session → SSE/JSON, with a fallback to the minimal JSON-RPC dialect for built-ins). Migration `0020_mcp_server_auth`.
+- **Tier 2 — OAuth 2.1 (planned, future phase).** The full MCP authorization spec for SaaS servers (Sentry, Linear, Notion, GitHub, Atlassian, Stripe…): dynamic client registration + PKCE + browser consent + token refresh + a callback endpoint + consent UI. A dedicated mini-phase — heavier than Tier 1 and not started. **Security:** tokens encrypted at rest, refresh handled server-side, per-workspace isolation, SSRF guard still applies, scopes shown to the user at consent.
 
 ---
 
@@ -1197,6 +1206,50 @@ Each phase below is a unit of work. Follow Rules 1–10 strictly. Each phase end
 - [ ] Tool playground refuses to invoke a tool the agent isn't granted
 
 **Git tag:** `phase-15-complete`
+
+---
+
+### Phase 16 — SILA: Conversational Platform Concierge ⭐
+
+**Goal:** Let non-experts build agents and operate the platform by *talking* (or typing) to a concierge — **SILA** (صلة, "connection / link" — your link to the platform). It asks clarifying questions, opens modals mid-session (e.g. for a data upload) without ending the conversation, builds Dify agents *and* n8n workflows on the user's behalf, and drives the platform UI — all strictly within the user's role. The capstone that fuses Phase 9 (Voice), Phase 14 (chat-to-build), and a function-calling orchestration brain.
+
+**Execution:** Capstone — runs after Phases 11–15, after Phase 9 (voice infra), and after KB document processing is moved to a dedicated worker container (the in-process pipeline twice took the API down; a concierge firing many operations would amplify that). Build order: **text-first, voice-after.**
+
+**Security review checklist:**
+- [ ] Concierge acts only via the user's JWT — every tool call passes through the existing `require_workspace_role` + OPA; worst case is 403, never privilege escalation
+- [ ] Builder-scope tool registry only: NO delete, NO member/role change, NO publish/approve
+- [ ] Generated agents are always Draft + Unvetted — must pass the Phase 6 gatekeeper before publish; the concierge cannot self-approve
+- [ ] External-effect actions (n8n social/email nodes) require explicit user confirmation + classification gating; cloud-LLM nodes stay excluded (sovereignty / PDPL)
+- [ ] Concierge cannot set an agent's classification itself (inherits workspace default)
+- [ ] Every concierge action is audit-logged with an "actor = concierge on behalf of <user>" marker
+- [ ] Conversation/session tables are RLS-scoped per workspace
+- [ ] WebSocket auth: the concierge socket verifies the same JWT and closes on token expiry
+- [ ] Voice (16E): consent before recording; recordings encrypted + retention per Phase 9; no raw audio in logs
+
+**Features (5 stages):**
+- [ ] **16A — LLM gateway upgrade:** add token streaming + native Ollama tool/function-calling to the `LLMGateway` Protocol + `OllamaLLMAdapter` (keep `complete_json` for the gatekeeper). Tune the orchestration model (qwen2.5:7b → 14b) within the 12 GB VRAM budget.
+- [ ] **16B — Concierge brain:** `ConciergeService` function-calling loop; a *curated* tool registry where each tool wraps an existing service call (so OPA still enforces); conversation-state tables; a WebSocket channel carrying user text, streamed assistant tokens, tool-call status, and UI commands (`open_modal` / `navigate` / `highlight` / `await_input`)
+- [ ] **16C — Generators:** spec → Dify YAML (Draft + Unvetted; reuse `validate_yaml` + `AgentService.import_from_yaml`); spec → n8n workflow (extend `N8nService` with `create_workflow`, local/allow-listed nodes only)
+- [ ] **16D — Orb widget:** persistent floating concierge orb (Listening / Thinking / Speaking) mounted in the `(app)` shell; WS client; renders mid-session modals; an activity trail of tool calls; confirmation prompts for external/irreversible actions
+- [ ] **16E — Voice:** the Phase 9 stack (LiveKit, faster-whisper, Piper/Coqui, Silero VAD, Pipecat) feeds transcribed text into the *same* 16B brain and speaks responses; optional "SILA/JARVIS" wake word; the orb reacts to state
+
+**Cut for v1 (interfaces stay production-ready):**
+- ❌ Destructive/admin ops (delete, member/role changes) and publish/approve — vetting stays a human decision
+- ❌ Arabic voice — deferred to the Phase 10 localization pass
+- ❌ Fully autonomous execution of external actions without confirmation
+
+**OSS tools:** Ollama (tool-calling model), FastAPI WebSockets, LiveKit, faster-whisper, Piper/Coqui TTS, Silero VAD, Pipecat
+
+**Plan template:** before implementing each stage, output the tool-registry schema (per tool: name, JSON schema, which existing service it wraps, role required), the conversation-state tables + migration, the WebSocket message protocol, and the safety/confirmation flow.
+
+**Manual test checklist:**
+- [ ] Text: "build an agent that answers HR questions from my handbook" → concierge asks clarifying Qs → opens an upload modal mid-session → user uploads → drafts the agent (Draft + Unvetted) → it appears in Agents → it is blocked from publish until it passes the gatekeeper
+- [ ] Text: the morning AI-trends → social-post-with-media → email example → created as an n8n workflow draft (local LLM node; external publish/email nodes confirmed)
+- [ ] Safety: concierge attempts a delete / a publish / a cross-workspace action → blocked (not in registry / 403 / stays Draft)
+- [ ] The orb opens modals mid-session without ending the conversation; the WebSocket reconnects after a drop
+- [ ] Voice round-trip (speak → transcribe → brain → speak), barge-in, consent prompt, orb state transitions
+
+**Git tag:** `phase-16-complete`
 
 ---
 

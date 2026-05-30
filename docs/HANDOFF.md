@@ -55,9 +55,10 @@ The Phase 6 gatekeeper used to be regex-only (Presidio PII + rule-based prompt-i
 4. **Surface `email` + `full_name` on `/v1/workspaces/{wid}/members`** so the workspace home avatar can show real initials instead of UUID-hex. One-line change in the repository + Pydantic schema. After this, `apps/web/app/(app)/workspaces/[workspaceId]/page.tsx` should swap `initials(m.user_id)` → `initials(m.email)` and `shortenId(m.user_id)` → `m.email`.
 5. **"Register as agent" button → persist n8n workflow ID** into the Wekala `agents` table. Live TODO from before this session. Belongs in Phase 15 (builder bridges).
 6. **`AgentRuntime.invoke()` TODO** — currently a phantom method with `# type: ignore`. Real implementation needed for the test playground (Phase 14).
+7. **MCP auth Tier 2 — OAuth 2.1 (planned).** Tier 1 (static token / API key, Fernet-encrypted) shipped this session — see CLAUDE.md §6 "MCP authentication". Tier 2 (OAuth: dynamic client registration + PKCE + browser consent + token refresh + callback endpoint) is a future mini-phase for SaaS servers (Sentry/Linear/Notion/GitHub/Atlassian). Not started.
 
 ### Phase 11–15 roadmap (per CLAUDE.md §6)
-Execution order is **11 → 12 → 13 → 14 → 15 → 9 → 10**. Numbering append-only.
+Execution order is **11 → 12 → 13 → 14 → 15 → 9 → 10 → 16**. Numbering append-only.
 
 - **Phase 11 — Design system foundation** ✅ mostly done implicitly (shadcn installed, primitives in use across vetting / workspace home / dashboard). Outstanding: onboarding wizard after signup, design-token doc.
 - **Phase 12 — Auth flow redesign** ❌ not started. Sign-up, sign-in, verify, reset-password all still on old Tailwind. Plan exists in CLAUDE.md.
@@ -65,6 +66,7 @@ Execution order is **11 → 12 → 13 → 14 → 15 → 9 → 10**. Numbering ap
 - **Phase 14 — Agent flow redesign** 🟡 partial. Templates page ✅, Import page ✅, Vetting page ✅. Outstanding: agents list polish, agent detail tabs (Overview / Versions / Vetting / Tools / Test), New-Agent 4-tab page (currently just Templates + Upload), test playground with SSE streaming, chat-to-build wizard.
 - **Phase 15 — Builder bridges** ❌ not started. "Build in Dify" deep-link, n8n workflows sidebar, Langfuse trace deep-links, agent reports table + UI, tool playground.
 - **Phase 9 — Voice**, **Phase 10 — Localization** — deferred to after 11–15.
+- **Phase 16 — SILA: Conversational Platform Concierge** ⭐ (capstone, the "JARVIS") ❌ not started. Voice/text concierge that lets non-experts build agents + n8n workflows by talking; asks clarifying questions, opens mid-session modals (e.g. uploads), drives the platform UI — all within the user's role. Decisions locked: **text-first then voice · builds both Dify agents + n8n workflows · builder-scope only (no delete/publish/admin) · capstone after Phase 9 + 15 + the KB worker-container fix.** Full spec in CLAUDE.md §6 Phase 16. Hard prereq: move KB document processing to a dedicated worker container (the in-process pipeline twice took the API down). Stages: 16A LLM gateway streaming+tool-calling · 16B concierge brain + tool registry + WebSocket · 16C agent/workflow generators · 16D orb widget + mid-session modals · 16E voice (Phase 9 stack).
 
 ## Files to read before changing anything
 
