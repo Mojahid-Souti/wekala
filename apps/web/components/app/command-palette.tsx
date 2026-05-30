@@ -37,8 +37,10 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const isCmdK = e.key.toLowerCase() === "k" && (isMac ? e.metaKey : e.ctrlKey);
-      if (!isCmdK) return;
+      // Some keydown events (IME composition, password-manager autofill) carry
+      // no `key` — guard before calling string methods on it.
+      if (e.key?.toLowerCase() !== "k") return;
+      if (isMac ? !e.metaKey : !e.ctrlKey) return;
       e.preventDefault();
       setOpen((o) => !o);
     };
