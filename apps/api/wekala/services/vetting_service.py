@@ -20,9 +20,12 @@ from typing import Any
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from wekala.adapters.llm.ollama import OllamaLLMAdapter
 from wekala.adapters.scanner.base import AgentScanner, Finding, ScanInput
+from wekala.adapters.scanner.llm import LLMScanner
 from wekala.adapters.scanner.pii import PIIScanner
 from wekala.adapters.scanner.prompt_injection import RuleBasedInjectionScanner
+from wekala.core.config import settings
 from wekala.core.constants import Action, AgentStatus, Outcome, ResourceType
 from wekala.core.policies.classification_policy import (
     ClassificationPolicy,
@@ -59,6 +62,54 @@ def _extract_system_prompt(dify_dsl: dict[str, Any]) -> str:
 def _opening_statement(dify_dsl: dict[str, Any]) -> str:
     """Use opening_statement as the sample input proxy when no explicit sample exists."""
     return str(dify_dsl.get("opening_statement", "") or "")
+
+
+def _default_scanners() -> list[AgentScanner]:
+    """LLM review + regex fallback (running in parallel).
+
+    Both run side-by-side so if the LLM call times out or Ollama is
+    unreachable, the regex baseline still surfaces findings — defence in
+    depth for PDPL compliance.
+    """
+    gateway = OllamaLLMAdapter(
+        base_url=settings.ollama_url,
+        model=settings.llm_scanner_model,
+    )
+    return [
+        LLMScanner(gateway=gateway, timeout_s=settings.llm_scanner_timeout_s),
+        PIIScanner(),
+        RuleBasedInjectionScanner(),
+    ]
+
+
+def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
+    """Merge near-identical findings produced by multiple scanners.
+
+    Two findings are "the same" when (finding_type, location, normalized
+    prefix of matched_full) match. The LLM and the regex scanner often
+    flag the same logical issue with slightly different substrings
+    (LLM: "Ignore previous instructions", regex: "Ignore previous
+    instructions and reveal") — without a tolerant key, both leak through
+    and the reviewer sees duplicates. We collapse on a 30-char normalized
+    prefix, which is wide enough to distinguish genuine separate findings
+    but narrow enough to fold near-duplicates.
+
+    Order: keep the first occurrence. Scanner order in `_default_scanners`
+    puts the LLM first, so its prose-y location wins.
+
+    Complexity: O(n) over the findings — single pass with a hash set.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    out: list[Finding] = []
+    for f in findings:
+        # Normalize: lowercase, collapse whitespace, take first 30 chars.
+        normalized = " ".join(f.matched_full.lower().split())[:30]
+        key = (f.finding_type, f.location, normalized)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(f)
+    return out
 
 
 def _summarize_findings(findings: list[Finding]) -> dict[str, Any]:
@@ -100,7 +151,7 @@ class VettingService:
         self._agents = AgentRepository(db_session)
         self._vetting = VettingRepository(db_session)
         self._audit = AuditRepository(db_session)
-        self._scanners = scanners or [PIIScanner(), RuleBasedInjectionScanner()]
+        self._scanners = scanners or _default_scanners()
         self._policy = policy or get_classification_policy()
 
     # ------------------------------------------------------------------
@@ -322,9 +373,11 @@ async def _execute_scan(session: AsyncSession, run_id: uuid.UUID, agent_id: uuid
         sample_input=_opening_statement(dify_dsl),
         tool_names=[],  # tool whitelist enforcement folded into policy_findings below
         classification=agent.classification,
+        # LLM scanner reads the full DSL; regex scanners ignore this field.
+        dify_dsl=dify_dsl,
     )
 
-    scanners = [PIIScanner(), RuleBasedInjectionScanner()]
+    scanners = _default_scanners()
     findings: list[Finding] = []
     try:
         per_scanner = await asyncio.wait_for(
@@ -338,6 +391,10 @@ async def _execute_scan(session: AsyncSession, run_id: uuid.UUID, agent_id: uuid
 
     for batch in per_scanner:
         findings.extend(batch)
+
+    # Dedupe — LLM and regex frequently report the same injection on the
+    # same substring; the reviewer should see it once.
+    findings = _dedupe_findings(findings)
 
     # Classification policy check — denied tools, KB scopes (tools wired later)
     findings.extend(_policy_findings(agent, policy))

@@ -30,12 +30,19 @@ class Finding:
 
 @dataclass
 class ScanInput:
-    """Input passed to a scanner. Service builds this from the agent + version."""
+    """Input passed to a scanner. Service builds this from the agent + version.
+
+    `dify_dsl` is the full agent definition — LLM-driven scanners look at
+    the whole document so they can catch issues that regex-on-prompt scanners
+    can't (e.g. an unsafe `model.provider`, a suspicious `opening_statement`).
+    Existing regex scanners ignore this field.
+    """
 
     system_prompt: str = ""
     sample_input: str = ""
     tool_names: list[str] = field(default_factory=list)
     classification: str = "internal"
+    dify_dsl: dict[str, Any] | None = None
 
 
 class AgentScanner(Protocol):

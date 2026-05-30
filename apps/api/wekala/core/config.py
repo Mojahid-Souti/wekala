@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     clamav_port: int = 3310
     ollama_url: str = "http://ollama:11434"
     embedding_model: str = "bge-m3"
+    # Phase 6 LLM-driven gatekeeper. Local-only inference — never an external API.
+    llm_scanner_model: str = "qwen2.5:7b-instruct"
+    llm_scanner_timeout_s: float = 30.0
     embedding_batch_size: int = 32
     document_max_mb: int = 50
     document_chunk_tokens: int = 1024
