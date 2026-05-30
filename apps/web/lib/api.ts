@@ -91,6 +91,16 @@ export type TemplateOut = {
   id: string;
   name: string;
   description: string;
+  icon_emoji?: string;
+  icon_background?: string;
+  icon_name?: string;
+  category?: string;
+  classification?: "Public" | "Internal" | "Restricted" | "Confidential" | string;
+  connectors?: string[];
+  tags?: string[];
+  use_count?: number;
+  featured?: boolean;
+  sample_prompts?: string[];
 };
 
 export type BazaarAgentOut = {
@@ -251,6 +261,12 @@ export const api = {
     versions: (workspaceId: string, agentId: string, token: string) =>
       request<AgentVersionOut[]>(
         `/v1/workspaces/${workspaceId}/agents/${agentId}/versions`,
+        {},
+        token
+      ),
+    yaml: (workspaceId: string, agentId: string, token: string) =>
+      request<{ yaml: string; version: number }>(
+        `/v1/workspaces/${workspaceId}/agents/${agentId}/yaml`,
         {},
         token
       ),
