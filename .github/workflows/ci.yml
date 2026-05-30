@@ -92,7 +92,6 @@ jobs:
             "apps/api/alembic/versions/0005_agents.py"
             "apps/api/alembic/versions/0006_agent_versions.py"
             "apps/api/alembic/versions/0007_agent_imports.py"
-            "apps/api/wekala/templates/customer_support.yaml"
             "apps/api/tests/test_agents.py"
           )
           for f in "${files[@]}"; do
@@ -101,6 +100,12 @@ jobs:
               missing=$((missing+1))
             fi
           done
+          # Templates churn (customer_support.yaml -> test.yaml -> curated set),
+          # so assert the directory has at least one template rather than naming one.
+          if ! ls apps/api/wekala/templates/*.yaml >/dev/null 2>&1; then
+            echo "MISSING: no template YAML in apps/api/wekala/templates/"
+            missing=$((missing+1))
+          fi
           [ "$missing" -eq 0 ] && echo "All required files present." || exit 1
 
       - name: .gitignore covers secrets and build artefacts
