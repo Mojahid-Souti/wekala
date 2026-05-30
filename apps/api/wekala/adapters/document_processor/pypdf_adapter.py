@@ -6,12 +6,23 @@ to get richer layout extraction without changing any caller.
 
 import io
 import logging
+import shutil
 
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
 _ALLOWED_TYPES = {"pdf", "docx", "txt", "md", "html"}
+
+# Resolve OCR availability ONCE at import, not per page. An image-heavy PDF
+# (e.g. a slide deck) has no text layer on every page, so the old code tried
+# to decode an image and shell out to tesseract for each one. When tesseract
+# isn't installed every attempt fails — but the per-page image decode is
+# CPU-bound and holds the GIL, starving the asyncio event loop and making the
+# whole API unresponsive. If OCR can't work, skip it entirely.
+_OCR_AVAILABLE = shutil.which("tesseract") is not None
+if not _OCR_AVAILABLE:
+    logger.info("Tesseract not found — OCR fallback disabled; image-only PDF pages yield no text")
 
 
 class PypdfAdapter:
@@ -53,6 +64,10 @@ class PypdfAdapter:
 
     def _ocr_page(self, page: object) -> str:
         """Tesseract OCR on a pypdf page image. Returns empty string if pytesseract unavailable."""
+        # Skip the image-decode + OCR shell-out entirely when tesseract is
+        # absent — that work would just fail anyway, but pegs CPU/GIL per page.
+        if not _OCR_AVAILABLE:
+            return ""
         try:
             import pytesseract
             from PIL import Image

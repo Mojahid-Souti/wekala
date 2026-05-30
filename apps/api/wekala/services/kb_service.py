@@ -13,6 +13,7 @@ Search:
   Results scoped to workspace_id at query time + enforced by RLS.
 """
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -32,6 +33,13 @@ from wekala.db.repositories.audit import AuditRepository
 from wekala.db.repositories.knowledge_base import ChunkRepository, DocumentRepository, KBRepository
 
 logger = logging.getLogger(__name__)
+
+# Serialize document processing across the whole process. Each job is
+# CPU/IO-heavy (parse, PII NER, embedding); running two concurrently on one
+# event loop is what made a second upload crash the API while the first was
+# still processing. One-at-a-time keeps the API responsive; queued docs sit
+# at status=pending until their turn.
+_PROCESSING_LOCK = asyncio.Semaphore(1)
 
 _ALLOWED_TYPES: dict[str, str] = {
     "pdf": "application/pdf",
@@ -244,6 +252,14 @@ class KnowledgeBaseService:
                 outcome=Outcome.SUCCESS,
             )
 
+        # Commit NOW, before scheduling the background task. FastAPI runs
+        # background tasks before the get_db transaction would otherwise
+        # commit, so without this explicit commit: (1) _process_document opens
+        # its own session and can't see the uncommitted doc, and (2) the
+        # client's immediate refetch returns an empty list. Same pattern the
+        # vetting service uses.
+        await self._db.commit()
+
         # Kick off async processing — does not block the response
         background_tasks.add_task(
             self._process_document,
@@ -271,7 +287,10 @@ class KnowledgeBaseService:
         """
         from wekala.db.session import AsyncSessionLocal
 
-        async with AsyncSessionLocal() as session:
+        # One document processes at a time (see _PROCESSING_LOCK). The doc is
+        # already persisted as 'pending', so a queued one stays visible in the
+        # list and simply waits here for its turn.
+        async with _PROCESSING_LOCK, AsyncSessionLocal() as session:
             docs = DocumentRepository(session)
             chunks_repo = ChunkRepository(session)
 
@@ -279,15 +298,17 @@ class KnowledgeBaseService:
             await session.commit()
 
             try:
-                # 1. Parse
+                # 1. Parse (already offloaded to a thread inside the adapter)
                 pages = await self._processor.extract_pages(content, file_type)
                 page_count = len(pages)
 
-                # 2. PII flag (Phase 6 will block; here we just log)
-                _flag_pii(pages, doc_id)
+                # 2. PII flag (Phase 6 will block; here we just log). Presidio
+                #    runs spaCy NER — CPU-bound, so offload it off the loop.
+                await asyncio.to_thread(_flag_pii, pages, doc_id)
 
-                # 3. Chunk
-                raw_chunks = _chunk_text(
+                # 3. Chunk — pure-Python string work; offload to stay responsive.
+                raw_chunks = await asyncio.to_thread(
+                    _chunk_text,
                     pages,
                     settings.document_chunk_tokens,
                     settings.document_chunk_overlap,
@@ -435,22 +456,43 @@ class KnowledgeBaseService:
 # ---------------------------------------------------------------------------
 
 
-def _flag_pii(pages: list[str], doc_id: uuid.UUID) -> None:
-    """Log PII detections. Phase 6 will block; Phase 4 only flags."""
-    try:
-        from presidio_analyzer import AnalyzerEngine
+_pii_engine: Any = None
+_pii_engine_loaded = False
 
-        engine = AnalyzerEngine()
-        for page in pages:
-            results = engine.analyze(text=page, language="en")
-            if results:
-                logger.warning(
-                    "PII detected in document %s: %s",
-                    doc_id,
-                    [r.entity_type for r in results],
-                )
-    except ImportError:
-        pass  # presidio optional until Phase 6
+
+def _get_pii_engine() -> Any:
+    """Lazily build the Presidio engine ONCE. Loading spaCy models is heavy —
+    rebuilding it per document was a big chunk of the 'processing takes long'.
+    """
+    global _pii_engine, _pii_engine_loaded
+    if not _pii_engine_loaded:
+        _pii_engine_loaded = True
+        try:
+            from presidio_analyzer import AnalyzerEngine
+
+            _pii_engine = AnalyzerEngine()
+        except ImportError:
+            _pii_engine = None  # presidio optional until Phase 6
+    return _pii_engine
+
+
+def _flag_pii(pages: list[str], doc_id: uuid.UUID) -> None:
+    """Log PII detections. Phase 6 will block; Phase 4 only flags.
+
+    Runs off the event loop (called via asyncio.to_thread) — spaCy NER is
+    CPU-bound and would otherwise freeze the whole API mid-upload.
+    """
+    engine = _get_pii_engine()
+    if engine is None:
+        return
+    for page in pages:
+        results = engine.analyze(text=page, language="en")
+        if results:
+            logger.warning(
+                "PII detected in document %s: %s",
+                doc_id,
+                [r.entity_type for r in results],
+            )
 
 
 def _rrf_fuse(
