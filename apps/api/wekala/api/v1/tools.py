@@ -34,6 +34,10 @@ class RegisterMCPServerRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     description: str = ""
     url: str
+    # Tier-1 auth (optional). The token is encrypted at rest and never returned.
+    auth_token: str | None = Field(default=None, max_length=4096)
+    auth_header: str = Field(default="Authorization", max_length=64)
+    auth_scheme: str = Field(default="Bearer", max_length=20)
 
 
 class MCPServerOut(BaseModel):
@@ -45,6 +49,8 @@ class MCPServerOut(BaseModel):
     transport: str
     is_builtin: bool
     status: str
+    # True when an auth token is stored — the token itself is never exposed.
+    has_auth: bool = False
 
     @classmethod
     def from_model(cls, m: Any) -> MCPServerOut:
@@ -57,6 +63,7 @@ class MCPServerOut(BaseModel):
             transport=m.transport,
             is_builtin=m.is_builtin,
             status=m.status,
+            has_auth=getattr(m, "auth_value_encrypted", None) is not None,
         )
 
 
@@ -90,6 +97,11 @@ class InvokeToolRequest(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class ToolImageOut(BaseModel):
+    # Ready-to-render data URL, e.g. "data:image/png;base64,iVBORw0K…".
+    data_url: str
+
+
 class ToolInvocationOut(BaseModel):
     id: uuid.UUID
     tool_id: uuid.UUID | None
@@ -98,6 +110,8 @@ class ToolInvocationOut(BaseModel):
     latency_ms: int
     output_preview: str
     error: str | None
+    # Images returned by the tool (live response only; not persisted).
+    images: list[ToolImageOut] = Field(default_factory=list)
 
 
 def _service(db: AsyncSession) -> ToolService:
@@ -131,6 +145,9 @@ async def register_mcp_server(
         name=body.name,
         description=body.description,
         url=body.url,
+        auth_token=body.auth_token,
+        auth_header=body.auth_header,
+        auth_scheme=body.auth_scheme,
     )
     return MCPServerOut.from_model(srv)
 
@@ -300,13 +317,14 @@ async def invoke_tool(
     await _ensure_agent_in_workspace(db, workspace_id, agent_id)
 
     svc = _service(db)
-    inv = await svc.invoke_tool(
+    res = await svc.invoke_tool(
         agent_id=agent_id,
         tool_id=tool_id,
         workspace_id=workspace_id,
         actor_id=current_user.id,
         arguments=body.arguments,
     )
+    inv = res.invocation
     return ToolInvocationOut(
         id=inv.id,
         tool_id=inv.tool_id,
@@ -315,6 +333,7 @@ async def invoke_tool(
         latency_ms=inv.latency_ms,
         output_preview=inv.output_preview,
         error=inv.error,
+        images=[ToolImageOut(data_url=u) for u in res.image_urls],
     )
 
 

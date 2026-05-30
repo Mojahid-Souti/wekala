@@ -14,27 +14,55 @@ Invocation hot path:
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import logging
+import re
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
 from fastapi import HTTPException, status
 from jsonschema import Draft202012Validator, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from wekala.adapters.mcp.base import MCPClient
+from wekala.adapters.mcp.base import MCPClient, MCPImageBlock
 from wekala.adapters.mcp.http_client import HTTPMCPClient, MCPError
 from wekala.core.constants import Action, Outcome, ResourceType
+from wekala.core.security.field_crypto import FieldDecryptionError, decrypt_field, encrypt_field
 from wekala.core.security.ssrf_guard import validate_external_url
 from wekala.db.models import MCPServer, Tool, ToolInvocation
 from wekala.db.repositories.audit import AuditRepository
 from wekala.db.repositories.mcp_server import MCPServerRepository, ToolRepository
 
+logger = logging.getLogger(__name__)
+
 PREVIEW_MAX_CHARS = 200
+
+
+# Image URLs embedded in a tool's text output. Gradio-backed MCP tools (e.g.
+# Z-Image) return a file URL rather than a base64 image block, so we surface
+# those too. Restricted to image extensions + http(s).
+_IMAGE_URL_RE = re.compile(r"https?://[^\s'\"<>)]+\.(?:png|jpe?g|webp|gif|bmp|svg)", re.IGNORECASE)
+
+
+@dataclass
+class InvokeResult:
+    """A completed tool invocation plus any renderable image URLs it returned.
+
+    `image_urls` are ready-to-render `<img src>` strings — either a base64
+    `data:` URL (from an MCP image block) or an external https URL found in the
+    text output. Returned to the caller (playground) but never persisted; the
+    DB row keeps only a short text preview.
+    """
+
+    invocation: ToolInvocation
+    image_urls: list[str] = field(default_factory=list)
 
 
 def _sha256(s: str) -> str:
@@ -45,6 +73,17 @@ def _preview(s: str) -> str:
     return s[:PREVIEW_MAX_CHARS]
 
 
+def _extract_image_urls(text: str) -> list[str]:
+    """Find image URLs in tool text output, de-duplicated, order preserved."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for url in _IMAGE_URL_RE.findall(text or ""):
+        if url not in seen:
+            seen.add(url)
+            out.append(url)
+    return out
+
+
 class ToolService:
     def __init__(
         self,
@@ -52,9 +91,8 @@ class ToolService:
         *,
         # Callable rather than type[MCPClient] — Protocol classes can't be
         # instantiated, so mypy treats type[Protocol] as having no constructor.
-        # A Callable[[str], MCPClient] expresses "give me a URL, I'll give
-        # you a client" which is what we actually want.
-        mcp_client_factory: Callable[[str], MCPClient] = HTTPMCPClient,
+        # "give me a URL (+ optional auth headers), I'll give you a client."
+        mcp_client_factory: Callable[..., MCPClient] = HTTPMCPClient,
         builtin_hostnames: frozenset[str] | None = None,
     ) -> None:
         self._db = db
@@ -66,6 +104,22 @@ class ToolService:
         # Built-ins are flagged at registration time; runtime invocation re-validates.
         self._builtin_hostnames = builtin_hostnames or frozenset()
 
+    def _auth_headers_for(self, srv: MCPServer) -> dict[str, str] | None:
+        """Decrypt the server's stored token into a request header, if any.
+
+        Returns e.g. {"Authorization": "Bearer hf_…"}. A decryption failure
+        (key rotated) degrades to no-auth rather than crashing the call.
+        """
+        if not srv.auth_value_encrypted:
+            return None
+        try:
+            token = decrypt_field(srv.auth_value_encrypted)
+        except FieldDecryptionError:
+            logger.warning("MCP server %s auth token could not be decrypted", srv.id)
+            return None
+        value = f"{srv.auth_scheme} {token}".strip() if srv.auth_scheme else token
+        return {srv.auth_header: value}
+
     # ---------- MCP server lifecycle ----------
 
     async def register_mcp_server(
@@ -76,6 +130,9 @@ class ToolService:
         name: str,
         description: str,
         url: str,
+        auth_token: str | None = None,
+        auth_header: str = "Authorization",
+        auth_scheme: str = "Bearer",
     ) -> MCPServer:
         """Validates URL via SSRF guard, then stores the server. Admin role required at API layer.
 
@@ -98,6 +155,9 @@ class ToolService:
 
         is_builtin = urlsplit(validated_url).hostname in self._builtin_hostnames
 
+        token = (auth_token or "").strip()
+        encrypted = encrypt_field(token) if token else None
+
         async with self._db.begin_nested():
             srv = await self._mcp_servers.create(
                 workspace_id=workspace_id,
@@ -106,6 +166,9 @@ class ToolService:
                 url=validated_url,
                 registered_by=actor_id,
                 is_builtin=is_builtin,
+                auth_value_encrypted=encrypted,
+                auth_header=(auth_header or "Authorization").strip() or "Authorization",
+                auth_scheme=(auth_scheme or "").strip(),
             )
             await self._audit.record(
                 action=Action.MCP_SERVER_REGISTER,
@@ -159,7 +222,7 @@ class ToolService:
                 detail=f"MCP server URL is no longer safe to call: {e}",
             ) from e
 
-        client = self._client_factory(srv.url)
+        client = self._client_factory(srv.url, auth_headers=self._auth_headers_for(srv))
         try:
             defs = await client.list_tools()
         except MCPError as e:
@@ -269,7 +332,7 @@ class ToolService:
         workspace_id: uuid.UUID,
         actor_id: uuid.UUID,
         arguments: dict[str, Any],
-    ) -> ToolInvocation:
+    ) -> InvokeResult:
         """Validate whitelist + schema, call MCP, record invocation.
         O(1) writes + 1 network call."""
         tool = await self._tools.get(tool_id)
@@ -318,13 +381,16 @@ class ToolService:
         input_preview = _preview(input_str)
 
         start = time.perf_counter()
-        client = self._client_factory(srv.url)
+        auth_headers = self._auth_headers_for(srv)
+        client = self._client_factory(srv.url, auth_headers=auth_headers)
         outcome = Outcome.SUCCESS
         err_msg: str | None = None
         output_content = ""
+        output_images: list[MCPImageBlock] = []
         try:
             result = await client.call_tool(tool.name, arguments)
             output_content = result.content
+            output_images = result.images
             if result.is_error:
                 outcome = Outcome.FAILURE
                 err_msg = output_content[:500]
@@ -332,6 +398,12 @@ class ToolService:
             outcome = Outcome.FAILURE
             err_msg = str(e)
         latency_ms = int((time.perf_counter() - start) * 1000)
+
+        # Keep the DB preview text-only; note images instead of storing base64.
+        preview_text = output_content
+        if not preview_text and output_images:
+            plural = "s" if len(output_images) != 1 else ""
+            preview_text = f"[{len(output_images)} image{plural} returned]"
 
         invocation = ToolInvocation(
             workspace_id=workspace_id,
@@ -341,7 +413,7 @@ class ToolService:
             input_hash=input_hash,
             input_preview=input_preview,
             output_hash=_sha256(output_content) if output_content else None,
-            output_preview=_preview(output_content),
+            output_preview=_preview(preview_text),
             latency_ms=latency_ms,
             outcome=outcome.value,
             error=err_msg,
@@ -366,4 +438,41 @@ class ToolService:
                 detail=f"Tool invocation failed: {err_msg}",
             )
 
-        return invocation
+        # Renderable images: base64 blocks → data URLs directly, plus any image
+        # URLs in the (full, untruncated) text output. Those URLs are often
+        # auth-gated (Gradio/HF file endpoints) so the browser can't load them —
+        # fetch them server-side with the server's token and inline as base64.
+        image_urls = [f"data:{im.mime_type};base64,{im.data}" for im in output_images]
+        extracted = _extract_image_urls(output_content)
+        image_urls.extend(await self._inline_images(extracted, auth_headers))
+        return InvokeResult(invocation=invocation, image_urls=image_urls)
+
+    async def _inline_images(
+        self, urls: list[str], auth_headers: dict[str, str] | None
+    ) -> list[str]:
+        """Fetch image URLs server-side (SSRF-guarded, with the server's auth)
+        and return them as base64 data URLs the browser can render without auth.
+
+        The token is the one the admin gave this (trusted) MCP server, sent only
+        to URLs that server itself returned. SSRF guard blocks internal targets.
+        Failures are skipped silently — the text output still carries the URL.
+        """
+        out: list[str] = []
+        for url in urls[:4]:  # cap: a tool shouldn't flood the response
+            try:
+                await validate_external_url(url)
+            except ValueError:
+                continue
+            try:
+                async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as http:
+                    resp = await http.get(url, headers=auth_headers or {})
+            except httpx.HTTPError:
+                logger.warning("Could not fetch tool image %s", url)
+                continue
+            ctype = resp.headers.get("content-type", "").split(";")[0].strip()
+            if resp.status_code != 200 or not ctype.startswith("image/"):
+                continue
+            if len(resp.content) > 8 * 1024 * 1024:  # 8 MB cap
+                continue
+            out.append(f"data:{ctype};base64,{base64.b64encode(resp.content).decode()}")
+        return out

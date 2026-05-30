@@ -17,7 +17,6 @@ import uuid
 
 import httpx
 import structlog
-from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +27,7 @@ from wekala.adapters.n8n.base import (
 )
 from wekala.adapters.n8n.rest import N8nRestAdapter
 from wekala.core.config import settings
+from wekala.core.security.field_crypto import decrypt_field, encrypt_field
 from wekala.db.models import N8nUserLink
 
 log = structlog.get_logger(__name__)
@@ -50,24 +50,9 @@ def _generate_n8n_password() -> str:
     return body + upper + digit + special + lower
 
 
-def _fernet() -> Fernet:
-    key = settings.wekala_field_encryption_key
-    if not key:
-        raise RuntimeError(
-            "WEKALA_FIELD_ENCRYPTION_KEY is unset — required for n8n password storage"
-        )
-    return Fernet(key.encode())
-
-
-def _encrypt(plaintext: str) -> bytes:
-    return _fernet().encrypt(plaintext.encode())
-
-
-def _decrypt(ciphertext: bytes) -> str:
-    try:
-        return _fernet().decrypt(ciphertext).decode()
-    except InvalidToken as err:
-        raise RuntimeError("n8n password decryption failed (encryption key rotated?)") from err
+# Field encryption is shared with MCP auth tokens — see core.security.field_crypto.
+_encrypt = encrypt_field
+_decrypt = decrypt_field
 
 
 def _derive_n8n_email(supabase_user_id: uuid.UUID) -> str:

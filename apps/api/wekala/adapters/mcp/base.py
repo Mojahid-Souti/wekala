@@ -6,7 +6,7 @@ new transports (stdio, websocket) can be added without touching the service laye
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 
@@ -20,12 +20,26 @@ class MCPToolDef:
 
 
 @dataclass
+class MCPImageBlock:
+    """An image content block from a tools/call result (base64-encoded)."""
+
+    data: str
+    mime_type: str
+
+
+@dataclass
 class MCPInvocationResult:
-    """Result returned from an MCP server's tools/call invocation."""
+    """Result returned from an MCP server's tools/call invocation.
+
+    `content` is the concatenated text. `images` holds any image blocks so
+    callers can surface them (e.g. an image-generation tool) without parsing
+    `raw` themselves.
+    """
 
     content: str
     is_error: bool
     raw: dict[str, Any]
+    images: list[MCPImageBlock] = field(default_factory=list)
 
 
 class MCPClient(Protocol):

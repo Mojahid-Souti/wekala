@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
 import { useToken } from "@/lib/use-token";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Wrench } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -140,6 +141,13 @@ export default function AgentDetailPage({ params }: Props) {
                 {t("publishButton")}
               </button>
             )}
+            <Link
+              href={ROUTES.agentTools(workspaceId, agentId)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:border-neutral-400"
+            >
+              <Wrench className="size-3.5" />
+              Tools
+            </Link>
             <Link
               href={ROUTES.agentVetting(workspaceId, agentId)}
               className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:border-neutral-400"

@@ -408,7 +408,14 @@ export const api = {
       request<MCPServerOut[]>(`/v1/workspaces/${workspaceId}/mcp-servers`, {}, token),
     register: (
       workspaceId: string,
-      body: { name: string; description?: string; url: string },
+      body: {
+        name: string;
+        description?: string;
+        url: string;
+        auth_token?: string;
+        auth_header?: string;
+        auth_scheme?: string;
+      },
       token: string
     ) =>
       request<MCPServerOut>(
@@ -708,6 +715,7 @@ export type MCPServerOut = {
   transport: string;
   is_builtin: boolean;
   status: string;
+  has_auth?: boolean;
 };
 
 export type ToolOut = {
@@ -728,6 +736,7 @@ export type ToolInvocationOut = {
   latency_ms: number;
   output_preview: string;
   error: string | null;
+  images?: { data_url: string }[];
 };
 
 export type KBOut = {

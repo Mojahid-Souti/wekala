@@ -30,6 +30,9 @@ class MCPServerRepository:
         url: str,
         registered_by: uuid.UUID,
         is_builtin: bool = False,
+        auth_value_encrypted: bytes | None = None,
+        auth_header: str = "Authorization",
+        auth_scheme: str = "Bearer",
     ) -> MCPServer:
         srv = MCPServer(
             workspace_id=workspace_id,
@@ -38,6 +41,9 @@ class MCPServerRepository:
             url=url,
             registered_by=registered_by,
             is_builtin=is_builtin,
+            auth_value_encrypted=auth_value_encrypted,
+            auth_header=auth_header,
+            auth_scheme=auth_scheme,
         )
         self._db.add(srv)
         await self._db.flush()

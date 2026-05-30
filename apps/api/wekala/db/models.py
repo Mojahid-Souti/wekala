@@ -424,6 +424,15 @@ class MCPServer(Base):
     registered_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("auth.users.id"), nullable=False
     )
+    # Tier-1 auth (Phase 5 ext): static token/API key sent as a header on every
+    # call. Fernet-encrypted at rest; never returned to the client. NULL = no auth.
+    auth_value_encrypted: Mapped[bytes | None] = mapped_column(nullable=True)
+    auth_header: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="Authorization", server_default="Authorization"
+    )
+    auth_scheme: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="Bearer", server_default="Bearer"
+    )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now(), onupdate=func.now()
