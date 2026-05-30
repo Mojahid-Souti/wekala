@@ -55,3 +55,154 @@
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * PrismJS tokens — minimal palette for the YAML editor in the import flow.
+ * Keep this in sync with the editor background in import-yaml-form.tsx
+ * (neutral-950). One-color-family palette so it reads as Wekala, not VSCode.
+ * --------------------------------------------------------------------------- */
+.token.comment {
+  color: rgb(115 115 115); /* neutral-500 */
+  font-style: italic;
+}
+.token.key,
+.token.tag,
+.token.atrule {
+  color: rgb(125 211 252); /* sky-300 */
+}
+.token.string,
+.token.url,
+.token.boolean {
+  color: rgb(134 239 172); /* green-300 */
+}
+.token.number,
+.token.constant {
+  color: rgb(252 211 77); /* amber-300 */
+}
+.token.punctuation,
+.token.operator {
+  color: rgb(163 163 163); /* neutral-400 */
+}
+.token.anchor,
+.token.alias {
+  color: rgb(196 181 253); /* violet-300 */
+}
+
+/* YAML error-line highlight inside the import editor. */
+.yaml-error-line {
+  display: inline-block;
+  width: 100%;
+  background-color: rgba(244, 63, 94, 0.15);
+  border-left: 2px solid rgb(244 63 94);
+  padding-left: 6px;
+  margin-left: -8px;
+}
+
+/* Hidden-but-scrollable scrollbar for the YAML editor (dark surface). */
+.yaml-editor-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.yaml-editor-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.yaml-editor-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.yaml-editor-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+.yaml-editor-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Security-warning line highlight (lighter than the parse-error wash). */
+.yaml-warning-line {
+  display: inline-block;
+  width: 100%;
+  background-color: rgba(251, 191, 36, 0.12); /* amber-400/12 */
+  border-left: 2px solid rgb(251 191 36);
+  padding-left: 6px;
+  margin-left: -8px;
+  cursor: help;
+}
+.yaml-error-line {
+  cursor: help; /* native title= tooltip on hover */
+}
+
+/* Vetting code-panel: per-finding line highlights. */
+.yaml-finding-critical,
+.yaml-finding-high,
+.yaml-finding-medium,
+.yaml-finding-low {
+  display: inline-block;
+  width: 100%;
+  padding-left: 6px;
+  margin-left: -8px;
+  cursor: help;
+}
+.yaml-finding-critical {
+  background-color: rgba(244, 63, 94, 0.18);
+  border-left: 2px solid rgb(244 63 94);
+}
+.yaml-finding-high {
+  background-color: rgba(244, 63, 94, 0.1);
+  border-left: 2px solid rgb(251 113 133);
+}
+.yaml-finding-medium {
+  background-color: rgba(251, 191, 36, 0.12);
+  border-left: 2px solid rgb(251 191 36);
+}
+.yaml-finding-low {
+  background-color: rgba(163, 163, 163, 0.1);
+  border-left: 2px solid rgb(163 163 163);
+}
+.yaml-finding-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: rgb(244, 63, 94);
+  background-color: rgba(244, 63, 94, 0.14);
+  border-radius: 4px;
+  vertical-align: baseline;
+}
+.yaml-flash-line {
+  display: inline-block;
+  width: 100%;
+  padding-left: 6px;
+  margin-left: -8px;
+  background-color: rgba(250, 204, 21, 0.35);
+  border-left: 2px solid rgb(250 204 21);
+  animation: yaml-flash 1.4s ease-out;
+}
+@keyframes yaml-flash {
+  0% {
+    background-color: rgba(250, 204, 21, 0.55);
+  }
+  100% {
+    background-color: rgba(250, 204, 21, 0.0);
+  }
+}
+
+/* Vetting inbox: pulse 3 times then settle. Animation key on the badge
+   re-fires this when the underlying runId changes (fresh scan = fresh
+   attention). */
+@keyframes vetting-inbox-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 10px rgba(244, 63, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
+  }
+}
+.vetting-inbox-pulse {
+  animation: vetting-inbox-pulse 1.6s ease-out;
+  animation-iteration-count: 3;
+}
