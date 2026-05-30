@@ -229,6 +229,28 @@
     "description": "Upload and manage documents. Agents can search them to ground their responses.",
     "newKB": "New Knowledge Base",
     "emptyKBs": "No knowledge bases yet. Create one to start uploading documents.",
+    "selectKBPrompt": "Create a knowledge base to start uploading documents.",
+    "selectKB": "Select KB",
+    "cancel": "Cancel",
+    "tabs": {
+      "documents": "Documents",
+      "upload": "Upload",
+      "search": "Search"
+    },
+    "documentsTitle": "Documents",
+    "emptyDocs": "No documents yet. Upload a file to get started.",
+    "deleteKB": "Delete knowledge base",
+    "deleteKBConfirm": "Delete this knowledge base and all its documents? This cannot be undone.",
+    "viewAsGrid": "Grid view",
+    "viewAsTable": "Table view",
+    "securityNote": "Uploaded files are virus-scanned and checked for PII before indexing.",
+    "table": {
+      "name": "Name",
+      "type": "Type",
+      "size": "Size",
+      "status": "Status",
+      "added": "Added"
+    },
     "kb": {
       "scope": {
         "workspace": "Workspace",
@@ -260,6 +282,14 @@
       "dropzoneHint": "PDF, DOCX, TXT, MD, HTML · max 50 MB",
       "uploadButton": "Upload",
       "uploading": "Uploading…",
+      "processing": "Processing…",
+      "uploadComplete": "Upload complete",
+      "dragDrop": "Drag and drop files here",
+      "or": "or",
+      "chooseFiles": "Choose files",
+      "statusSuccess": "Uploaded",
+      "statusFailed": "Failed",
+      "clear": "Remove file",
       "successTitle": "Upload accepted",
       "successMessage": "Your document is being processed. Status will update automatically.",
       "duplicateMessage": "This file already exists in the knowledge base.",
@@ -286,6 +316,8 @@
       "searching": "Searching…",
       "noResults": "No results found.",
       "resultsTitle": "Search Results",
+      "clear": "Clear search",
+      "showingResults": "Showing results for \"{query}\"",
       "source": "Source: {filename}, page {page}",
       "topK": "Top results"
     },

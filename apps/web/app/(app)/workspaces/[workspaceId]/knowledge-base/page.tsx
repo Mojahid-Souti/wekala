@@ -2,16 +2,36 @@
 
 export const dynamic = "force-dynamic";
 
-import { DocumentCard } from "@/components/kb/document-card";
+import { DocumentList } from "@/components/kb/document-list";
 import { SearchResults } from "@/components/kb/search-results";
 import { UploadForm } from "@/components/kb/upload-form";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type KBOut, type KBSearchResultItem, type KBUploadAcceptedOut, api } from "@/lib/api";
 import { useToken } from "@/lib/use-token";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronDown, Database, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 type Props = { params: Promise<{ workspaceId: string }> };
+type DeleteTarget =
+  | { kind: "kb"; id: string; name: string }
+  | { kind: "doc"; id: string; name: string };
 
 export default function KnowledgeBasePage({ params }: Props) {
   const { workspaceId } = use(params);
@@ -19,17 +39,35 @@ export default function KnowledgeBasePage({ params }: Props) {
   const qc = useQueryClient();
   const token = useToken();
 
-  const [selectedKB, setSelectedKB] = useState<KBOut | null>(null);
+  const [selectedKBId, setSelectedKBId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("documents");
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDesc, setCreateDesc] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<KBSearchResultItem[] | null>(null);
   const [searching, setSearching] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+
+  // Reset all per-KB state when the workspace changes — the component stays
+  // mounted across workspace switches, so a KB selected in workspace A would
+  // otherwise leak into B's view and query the wrong tenant's documents.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: workspaceId is the intentional reset trigger.
+  useEffect(() => {
+    setSelectedKBId(null);
+    setSearchResults(null);
+    setSearchQuery("");
+    setActiveTab("documents");
+  }, [workspaceId]);
+
+  const { data: workspace } = useQuery({
+    queryKey: ["workspace", workspaceId],
+    queryFn: () => api.workspaces.get(workspaceId, token),
+    enabled: !!token,
+  });
 
   const { data: kbsData, isLoading: kbsLoading } = useQuery({
     queryKey: ["kbs", workspaceId],
@@ -37,44 +75,71 @@ export default function KnowledgeBasePage({ params }: Props) {
     enabled: !!token,
   });
 
+  const selectedKB: KBOut | null = kbsData?.items.find((kb) => kb.id === selectedKBId) ?? null;
+
+  // Auto-select the first KB once the list loads — without the sidebar there's
+  // no list to click, so land the user straight on a knowledge base.
+  useEffect(() => {
+    if (!selectedKBId && kbsData && kbsData.items.length > 0) {
+      setSelectedKBId(kbsData.items[0].id);
+    }
+  }, [kbsData, selectedKBId]);
+
   const { data: docsData, isLoading: docsLoading } = useQuery({
-    queryKey: ["kb-docs", workspaceId, selectedKB?.id],
-    queryFn: () => api.kb.listDocuments(workspaceId, selectedKB?.id ?? "", token),
-    enabled: !!token && !!selectedKB,
+    queryKey: ["kb-docs", workspaceId, selectedKBId],
+    queryFn: () => api.kb.listDocuments(workspaceId, selectedKBId ?? "", token),
+    enabled: !!token && !!selectedKBId,
   });
 
   const createMutation = useMutation({
     mutationFn: () =>
       api.kb.createKB(workspaceId, { name: createName, description: createDesc }, token),
-    onSuccess: () => {
+    onSuccess: (kb) => {
       qc.invalidateQueries({ queryKey: ["kbs", workspaceId] });
       setShowCreate(false);
       setCreateName("");
       setCreateDesc("");
       setCreateError(null);
+      setSelectedKBId(kb.id);
     },
     onError: (e: Error) => setCreateError(e.message),
   });
 
-  const deleteDocMutation = useMutation({
-    mutationFn: (docId: string) =>
-      api.kb.deleteDocument(workspaceId, selectedKB?.id ?? "", docId, token),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["kb-docs", workspaceId, selectedKB?.id] }),
+  const deleteKBMutation = useMutation({
+    mutationFn: (kbId: string) => api.kb.deleteKB(workspaceId, kbId, token),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kbs", workspaceId] });
+      setSelectedKBId(null);
+      setDeleteTarget(null);
+    },
   });
 
-  const handleUploadDone = (result: KBUploadAcceptedOut) => {
-    setUploadSuccess(result.duplicate ? t("upload.duplicateMessage") : t("upload.successMessage"));
-    qc.invalidateQueries({ queryKey: ["kb-docs", workspaceId, selectedKB?.id] });
-    setTimeout(() => setUploadSuccess(null), 5000);
+  const deleteDocMutation = useMutation({
+    mutationFn: (docId: string) =>
+      api.kb.deleteDocument(workspaceId, selectedKBId ?? "", docId, token),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kb-docs", workspaceId, selectedKBId] });
+      setDeleteTarget(null);
+    },
+    onSettled: () => setDeletingDocId(null),
+  });
+
+  const handleUploadDone = (_result: KBUploadAcceptedOut) => {
+    qc.invalidateQueries({ queryKey: ["kb-docs", workspaceId, selectedKBId] });
+    // Briefly let the "Upload complete" state show, then land on the document
+    // list to watch the new file process (pending → ready).
+    setSearchResults(null);
+    window.setTimeout(() => setActiveTab("documents"), 900);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedKB || !searchQuery.trim()) return;
+    if (!selectedKBId || !searchQuery.trim()) return;
     setSearching(true);
     setSearchResults(null);
+    setActiveTab("documents");
     try {
-      const res = await api.kb.search(workspaceId, selectedKB.id, searchQuery, 10, token);
+      const res = await api.kb.search(workspaceId, selectedKBId, searchQuery, 10, token);
       setSearchResults(res.results);
     } catch {
       setSearchResults([]);
@@ -83,174 +148,306 @@ export default function KnowledgeBasePage({ params }: Props) {
     }
   };
 
+  function confirmDelete() {
+    if (!deleteTarget) return;
+    if (deleteTarget.kind === "kb") {
+      deleteKBMutation.mutate(deleteTarget.id);
+    } else {
+      setDeletingDocId(deleteTarget.id);
+      deleteDocMutation.mutate(deleteTarget.id);
+    }
+  }
+
+  const workspaceLabel = workspace?.name ?? t("kb.scope.workspace");
+  const deletePending = deleteKBMutation.isPending || deleteDocMutation.isPending;
+
   return (
-    <div className="flex min-h-0 gap-6">
-      {/* Left panel: KB list */}
-      <aside className="w-64 shrink-0">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-            {t("title")}
-          </h2>
+    <div className="mx-auto w-full max-w-[1400px] px-5 py-6 lg:px-7">
+      {/* Page header — KB switcher + create button top-right */}
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">{t("title")}</h1>
+          <p className="text-sm text-neutral-500">{t("description")}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {kbsData && kbsData.items.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-10 items-center gap-2 rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-900 transition-colors hover:border-neutral-400 data-[state=open]:border-neutral-900"
+                >
+                  <Database className="size-4 text-neutral-500" />
+                  <span className="max-w-[180px] truncate">
+                    {selectedKB?.name ?? t("selectKB")}
+                  </span>
+                  <ChevronDown className="size-4 text-neutral-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 p-1">
+                {kbsData.items.map((kb) => (
+                  <DropdownMenuItem
+                    key={kb.id}
+                    onSelect={() => {
+                      setSelectedKBId(kb.id);
+                      setSearchResults(null);
+                      setSearchQuery("");
+                      setActiveTab("documents");
+                    }}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 focus:bg-neutral-100"
+                  >
+                    <span className="grid size-4 shrink-0 place-items-center">
+                      {selectedKBId === kb.id && <Check className="size-3.5 text-neutral-900" />}
+                    </span>
+                    <Database className="size-4 shrink-0 text-neutral-400" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-neutral-900">
+                        {kb.name}
+                      </span>
+                      <span className="block truncate text-[11px] text-neutral-400">
+                        {workspaceLabel}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => setShowCreate(true)}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-neutral-700 focus:bg-neutral-100"
+                >
+                  <span className="grid size-4 shrink-0 place-items-center">
+                    <Plus className="size-3.5" />
+                  </span>
+                  {t("newKB")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800"
           >
-            +
+            <Plus className="size-4" />
+            {t("newKB")}
           </button>
         </div>
+      </header>
 
-        {kbsLoading && <p className="text-sm text-gray-400">Loading…</p>}
-        {kbsData?.items.length === 0 && <p className="text-sm text-gray-400">{t("emptyKBs")}</p>}
+      {/* Full-width content (KB list lives in the header switcher) */}
+      <div>
+        <main className="min-w-0">
+          {kbsLoading ? (
+            <div className="h-[420px] animate-pulse rounded-2xl border border-neutral-200 bg-neutral-50" />
+          ) : !selectedKB ? (
+            <div className="flex h-[420px] flex-col items-center justify-center rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 text-center">
+              <div className="grid size-12 place-items-center rounded-xl border border-neutral-200 bg-white text-neutral-400">
+                <Database className="size-5" />
+              </div>
+              <p className="mt-4 max-w-sm text-sm text-neutral-500">{t("selectKBPrompt")}</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* KB header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-semibold tracking-tight text-neutral-950">
+                    {selectedKB.name}
+                  </h2>
+                  {selectedKB.description && (
+                    <p className="mt-1 text-sm text-neutral-500">{selectedKB.description}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDeleteTarget({ kind: "kb", id: selectedKB.id, name: selectedKB.name })
+                  }
+                  aria-label={t("deleteKB")}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-600 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
 
-        <nav className="space-y-1">
-          {kbsData?.items.map((kb) => (
-            <button
-              key={kb.id}
-              type="button"
-              onClick={() => {
-                setSelectedKB(kb);
-                setSearchResults(null);
-              }}
-              className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${selectedKB?.id === kb.id ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
-            >
-              <span className="block truncate font-medium">{kb.name}</span>
-              <span
-                className={`text-xs ${selectedKB?.id === kb.id ? "text-indigo-200" : "text-gray-400"}`}
+              {/* Toolbar header: tabs + search */}
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <TabsList>
+                    <TabsTrigger value="documents">
+                      {t("tabs.documents")} ({docsData?.items.length ?? 0})
+                    </TabsTrigger>
+                    <TabsTrigger value="upload">{t("tabs.upload")}</TabsTrigger>
+                  </TabsList>
+
+                  <form onSubmit={handleSearch} className="relative w-full sm:w-72">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-neutral-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={t("search.placeholder")}
+                      className="w-full rounded-md border border-neutral-200 bg-white py-2 pl-9 pr-9 text-sm text-neutral-900 placeholder:text-neutral-400 transition-colors focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/5"
+                    />
+                    {searchResults !== null && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchResults(null);
+                          setSearchQuery("");
+                        }}
+                        aria-label={t("search.clear")}
+                        className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded text-neutral-400 hover:text-neutral-700"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    )}
+                  </form>
+                </div>
+
+                <TabsContent value="documents" className="mt-5">
+                  {searching ? (
+                    <div className="flex min-h-[200px] items-center justify-center text-sm text-neutral-500">
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      {t("search.searching")}
+                    </div>
+                  ) : searchResults !== null ? (
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium text-neutral-500">
+                        {t("search.showingResults", { query: searchQuery })}
+                      </p>
+                      <SearchResults results={searchResults} />
+                    </div>
+                  ) : (
+                    <DocumentList
+                      documents={docsData?.items ?? []}
+                      loading={docsLoading}
+                      deletingDocId={deletingDocId}
+                      onDelete={(docId) => {
+                        const doc = docsData?.items.find((d) => d.id === docId);
+                        setDeleteTarget({
+                          kind: "doc",
+                          id: docId,
+                          name: doc?.filename ?? "this document",
+                        });
+                      }}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="upload" className="mt-5">
+                  <UploadForm
+                    workspaceId={workspaceId}
+                    kbId={selectedKB.id}
+                    token={token}
+                    onUploaded={handleUploadDone}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Create-KB dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("createKB.title")}</DialogTitle>
+            <DialogDescription>{t("createKB.descriptionPlaceholder")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="kb-name"
+                className="block text-[11px] font-medium uppercase tracking-wider text-neutral-500"
               >
-                {t(`kb.scope.${kb.scope}`)}
-              </span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Create KB modal-ish inline form */}
-        {showCreate && (
-          <div className="mt-4 rounded-lg border bg-white p-4 shadow">
-            <h3 className="mb-3 text-sm font-semibold text-gray-800">{t("createKB.title")}</h3>
-            <label htmlFor="kb-name" className="mb-1 block text-xs text-gray-600">
-              {t("createKB.nameLabel")}
-            </label>
-            <input
-              id="kb-name"
-              type="text"
-              value={createName}
-              onChange={(e) => setCreateName(e.target.value)}
-              placeholder={t("createKB.namePlaceholder")}
-              className="mb-3 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <label htmlFor="kb-desc" className="mb-1 block text-xs text-gray-600">
-              {t("createKB.descriptionLabel")}
-            </label>
-            <textarea
-              id="kb-desc"
-              value={createDesc}
-              onChange={(e) => setCreateDesc(e.target.value)}
-              placeholder={t("createKB.descriptionPlaceholder")}
-              rows={2}
-              className="mb-3 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            {createError && <p className="mb-2 text-xs text-red-600">{createError}</p>}
-            <div className="flex gap-2">
+                {t("createKB.nameLabel")}
+              </label>
+              <input
+                id="kb-name"
+                type="text"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                placeholder={t("createKB.namePlaceholder")}
+                className="block w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 transition-colors focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/5"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="kb-desc"
+                className="block text-[11px] font-medium uppercase tracking-wider text-neutral-500"
+              >
+                {t("createKB.descriptionLabel")}
+              </label>
+              <textarea
+                id="kb-desc"
+                value={createDesc}
+                onChange={(e) => setCreateDesc(e.target.value)}
+                placeholder={t("createKB.descriptionPlaceholder")}
+                rows={2}
+                className="block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 transition-colors focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/5"
+              />
+            </div>
+            {createError && <p className="text-sm text-rose-600">{createError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="inline-flex h-9 items-center rounded-md border border-neutral-200 bg-white px-4 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+              >
+                {t("cancel")}
+              </button>
               <button
                 type="button"
                 disabled={!createName.trim() || createMutation.isPending}
                 onClick={() => createMutation.mutate()}
-                className="flex-1 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50"
               >
+                {createMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
                 {createMutation.isPending ? t("createKB.creating") : t("createKB.createButton")}
               </button>
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-              >
-                ✕
-              </button>
             </div>
           </div>
-        )}
-      </aside>
+        </DialogContent>
+      </Dialog>
 
-      {/* Right panel: selected KB content */}
-      <main className="min-w-0 flex-1">
-        {!selectedKB ? (
-          <div className="flex h-64 items-center justify-center rounded-xl border-2 border-dashed text-sm text-gray-400">
-            {t("emptyKBs")}
+      {/* Delete confirmation — centered modal (replaces window.confirm) */}
+      <Dialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {deleteTarget?.kind === "kb" ? t("deleteKB") : t("document.deleteButton")}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteTarget?.kind === "kb" ? t("deleteKBConfirm") : t("document.deleteConfirm")}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTarget && (
+            <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
+              {deleteTarget.name}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              className="inline-flex h-9 items-center rounded-md border border-neutral-200 bg-white px-4 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+            >
+              {t("cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              disabled={deletePending}
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-rose-600 px-4 text-sm font-medium text-white transition-colors hover:bg-rose-700 disabled:opacity-50"
+            >
+              {deletePending && <Loader2 className="size-3.5 animate-spin" />}
+              {t("document.deleteButton")}
+            </button>
           </div>
-        ) : (
-          <div className="space-y-8">
-            <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">{selectedKB.name}</h1>
-                {selectedKB.description && (
-                  <p className="mt-1 text-sm text-gray-500">{selectedKB.description}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Upload section */}
-            <section>
-              <h2 className="mb-3 text-base font-semibold text-gray-800">{t("upload.title")}</h2>
-              <UploadForm
-                workspaceId={workspaceId}
-                kbId={selectedKB.id}
-                token={token}
-                onUploaded={handleUploadDone}
-              />
-              {uploadSuccess && <p className="mt-2 text-sm text-green-700">{uploadSuccess}</p>}
-            </section>
-
-            {/* Documents list */}
-            <section>
-              <h2 className="mb-3 text-base font-semibold text-gray-800">{t("title")}</h2>
-              {docsLoading && <p className="text-sm text-gray-400">Loading…</p>}
-              {!docsLoading && docsData?.items.length === 0 && (
-                <p className="text-sm text-gray-400">{t("emptyKBs")}</p>
-              )}
-              <div className="space-y-2">
-                {docsData?.items.map((doc) => (
-                  <DocumentCard
-                    key={doc.id}
-                    doc={doc}
-                    onDelete={(docId) => {
-                      setDeletingDocId(docId);
-                      deleteDocMutation.mutate(docId, {
-                        onSettled: () => setDeletingDocId(null),
-                      });
-                    }}
-                    deleting={deletingDocId === doc.id}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* Search section */}
-            <section>
-              <h2 className="mb-3 text-base font-semibold text-gray-800">
-                {t("search.resultsTitle")}
-              </h2>
-              <form onSubmit={handleSearch} className="mb-4 flex gap-2">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t("search.placeholder")}
-                  className="flex-1 rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button
-                  type="submit"
-                  disabled={!searchQuery.trim() || searching}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {searching ? t("search.searching") : t("search.searchButton")}
-                </button>
-              </form>
-              {searchResults !== null && <SearchResults results={searchResults} />}
-            </section>
-          </div>
-        )}
-      </main>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
