@@ -288,3 +288,70 @@ Format:
   - **MFA flow** — interface stub only, no UI.
   - **Existing `/v1/auth/reset-password` backend endpoint** is now bypassed by the client-side `resetPasswordForEmail` call but kept for potential future use; could be removed in a cleanup pass.
 - ADRs added: —
+
+## Phase B — n8n multi-tenancy (parallel build-canvas track)
+
+- Started: 2026-05-25
+- Completed: 2026-05-25
+- Tag: phase-b-complete
+- Notes:
+  - **Wekala→n8n auth bridge**: each Wekala (Supabase) user is lazily provisioned a private n8n user on first canvas open; the mapping lives in `n8n_user_links`. n8n passwords are **Fernet-encrypted at rest** (now via the shared `core/security/field_crypto.py`). Owner bootstrap + login through the n8n REST adapter; a Set-Cookie route handler mints the per-user session.
+  - **Branded local model nodes** (`phase-b-nodes`, d17e178): one Wekala-branded n8n node per locally-pulled Ollama model so the canvas presents a sovereign, opinionated palette; generic Ollama nodes hidden via `NODES_EXCLUDE`.
+  - Commits: phase-b-nodes @ d17e178, phase-b-multitenancy @ a3bb487.
+- Outstanding:
+  - **Shared-canvas multi-tenancy gap** — see `memory/project-n8n-multitenancy.md`. Per-user isolation works via the bridge, but the embedded canvas still shares state in ways that block a clean multi-user demo. Production must use n8n Embed Edition or harden the bridge.
+- ADRs added: —
+
+## Phase 13 — App shell + dashboard (partial)
+
+- Started: 2026-05-25
+- Completed: — (partial — no `-complete` tag yet)
+- Tag: —
+- Notes:
+  - Shipped: collapsible sidebar + branded header + Cmd/Ctrl-K command palette (`1ba0789`); dashboard hero greeting by `full_name` from the JWT (`5dca50e`); neutral workspace-home redesign with stat tiles + role dropdown (`bb62070`).
+- Outstanding:
+  - Workspace **settings tabs** (General / Members / Developer / Danger zone) not yet split.
+  - Sidebar collapse-state polish.
+- ADRs added: —
+
+## Phase 6 ext — LLM-driven gatekeeper
+
+- Started: 2026-05-30
+- Completed: 2026-05-30
+- Tag: phase-6-llm-gatekeeper (commit ca6a1e9)
+- Notes:
+  - Added an LLM reviewer alongside the regex PII + injection scanners. New `LLMGateway` Protocol + `OllamaLLMAdapter` (`/api/chat`, `format=json`); `LLMScanner` implements the existing `AgentScanner` Protocol and sees the full Dify DSL. Runs in parallel via `asyncio.gather`; `_dedupe_findings` collapses (type, location, normalized prefix) so the LLM and regex don't double-report. Findings tagged `metadata.source="llm"`.
+  - **Fail-closed**: an Ollama error → the LLM scanner returns `[]` and the regex baseline still runs; the scan never aborts. Model: `qwen2.5:7b-instruct`.
+- Outstanding:
+  - Tune / size up the orchestration model for subtler injection patterns.
+- ADRs added: —
+
+## Phase 4 ext — KB redesign + processing stability
+
+- Started: 2026-05-30
+- Completed: 2026-05-30
+- Tag: — (folded into ongoing Phase 4; commits 45f8588, 706cd62)
+- Notes:
+  - **UI**: tabbed Knowledge Base page (Documents / Upload / Search), KB list moved into a header dropdown switcher, grid/table document toggle, auto-upload with a real XHR progress bar, centered create/delete dialogs.
+  - **Stability** (the in-process pipeline twice took the API down): skip OCR when tesseract is absent (was decoding an image per scanned page on the event loop); **commit the document before scheduling the background task** (uploads returned 202 but never persisted); **serialize processing** (`Semaphore(1)`) + offload PII/chunk to threads + cache the Presidio engine; storage bucket self-heals.
+- Outstanding:
+  - **Move document processing to a dedicated worker container** — the real fix, and a hard prerequisite for Phase 16 (SILA).
+- ADRs added: —
+
+## Phase 5 ext — MCP Streamable-HTTP + Tier-1 auth + tools playground
+
+- Started: 2026-05-30
+- Completed: 2026-05-30
+- Tag: mcp-tier1-auth (commit e72f91c)
+- Notes:
+  - **Transport**: full MCP Streamable-HTTP (2025-06-18) in `adapters/mcp/http_client.py` — initialize handshake → `Mcp-Session-Id` → SSE *or* JSON, with a fallback to the minimal JSON-RPC POST dialect for built-ins. Unlocks DeepWiki, Context7, Hugging Face, Microsoft Learn, Grep, GitMCP, Cloudflare Docs.
+  - **Tier-1 auth**: optional static token/API key per MCP server, Fernet-encrypted at rest (shared `field_crypto`; n8n password storage refactored onto it), sent as a header on every request; API exposes only `has_auth`. Migration `0020_mcp_server_auth`.
+  - **Tools UI**: catalog grouped into collapsible per-server sections; schema-driven **Tool Playground** (form from the tool's JSON Schema → invoke → result); returned images rendered inline (base64 blocks + image URLs fetched server-side, SSRF-guarded, inlined as base64); friendly transient-GPU error message.
+- Outstanding:
+  - **MCP OAuth (Tier 2)** for SaaS servers (Sentry/Linear/Notion/GitHub/Atlassian) — documented in CLAUDE.md §6, a future mini-phase.
+- ADRs added: —
+
+## Phase 16 — SILA (planned)
+
+- Status: **documented in CLAUDE.md §6, not started.** The conversational platform concierge (text-first → voice); builds Dify agents + n8n workflows; builder-scope only; capstone after Phase 9 + 15 + moving KB processing to a worker container.
+- ADRs added: —

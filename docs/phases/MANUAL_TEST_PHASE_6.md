@@ -153,3 +153,75 @@ suggested_questions: []
 ```
 
 All values are synthetic and chosen specifically to trip the recognizers.
+
+---
+
+## Post-Phase-6 extension — LLM-driven gatekeeper
+
+> Added 2026-05-30 (commit ca6a1e9, tag `phase-6-llm-gatekeeper`). The vetting
+> pipeline now runs an LLM reviewer (`LLMScanner` via `OllamaLLMAdapter`) in
+> parallel with the regex PII + injection scanners — deduped and fail-closed.
+> Fixture: the §11 poisoned YAML in this doc (also at `docs/phases/poisoned-test-agent.yaml`).
+
+### E1. LLM findings appear alongside regex findings
+
+**Steps:**
+1. Ensure Ollama is up with `qwen2.5:7b-instruct` pulled
+2. Import the §11 poisoned fixture; submit for review
+
+**Expected:**
+- The scan completes; findings include both regex-sourced and LLM-sourced entries
+- LLM-sourced findings carry `metadata.source = "llm"`; regex ones do not
+- The full scan stays within the 60s budget (the LLM call has its own 30s timeout inside the envelope)
+
+**Evidence:** the vetting run's findings JSON shows at least one `metadata.source="llm"` entry
+
+- [ ] Pass  [ ] Fail
+
+### E2. Dedup — LLM + regex don't double-report the same issue
+
+**Steps:**
+1. Inspect the findings list for the poisoned fixture
+
+**Expected:**
+- The IBAN / "ignore previous instructions" issues each appear **once**, not duplicated, even though both the LLM and the regex scanner flag them
+- Dedup key is `(finding_type, location, normalized first-30-chars)`
+
+- [ ] Pass  [ ] Fail
+
+### E3. Fail-closed when Ollama is unreachable ⭐
+
+**Steps:**
+1. Stop Ollama (or point `llm_scanner_model` at a missing model)
+2. Submit the poisoned fixture for review
+
+**Expected:**
+- The LLM scanner returns `[]` (logs a warning) but the scan **does not abort**
+- The regex baseline still runs and still catches the IBAN + injection patterns
+- The run completes normally (no 500; the agent is never silently auto-approved on LLM failure)
+
+**Evidence:** `docker logs wekala-api` shows an LLM gateway warning; the run still produces regex findings
+
+- [ ] Pass  [ ] Fail
+
+### E4. Clean agent still auto-approves (no LLM hallucinated findings)
+
+**Steps:**
+1. Import a clean template (no PII, no injection); submit for review
+
+**Expected:**
+- Both scanners return no findings; the agent auto-approves as in §2 above
+- The LLM "prefer empty list" anti-hallucination clause holds (no phantom findings on benign prompts)
+
+- [ ] Pass  [ ] Fail
+
+### E5. `test_llm_scanner.py` green
+
+**Steps:**
+```bash
+cd apps/api && uv run pytest tests/test_llm_scanner.py -v
+```
+
+**Expected:** 7 tests pass; the gateway is mocked (no real Ollama call in CI)
+
+- [ ] Pass  [ ] Fail

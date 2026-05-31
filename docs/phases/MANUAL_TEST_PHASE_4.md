@@ -259,3 +259,112 @@ make test-phase-4
 | 14 | `make test-phase-4` | |
 
 **Tester:** _______________  **Date:** _______________
+
+---
+
+## Post-Phase-4 extension — KB redesign + processing stability
+
+> Added 2026-05-30 (commits 45f8588 + 706cd62). Covers the tabbed KB page, the
+> header KB-switcher, the grid/table toggle, auto-upload with a live progress
+> bar, and the three event-loop stability fixes (OCR-skip, commit-before-
+> background-task, serialized processing). Run on top of the prerequisites above.
+
+### E1. Header KB-switcher + tabbed layout
+
+**Steps:**
+1. Open the Knowledge Base page with at least two KBs in the workspace
+2. Open the KB dropdown in the page header; pick a different KB
+3. Switch between the **Documents / Upload / Search** tabs
+
+**Expected:**
+- The dropdown lists every KB in the workspace; selecting one swaps the active KB without a full page reload
+- The first KB is auto-selected on load (no empty "select a KB" dead-end)
+- Tabs switch content in place; the active tab is visually marked
+
+- [ ] Pass  [ ] Fail
+
+### E2. Drag/click upload with live progress
+
+**Steps:**
+1. On the **Upload** tab, drag a PDF onto the dropzone (or click to pick)
+
+**Expected:**
+- Upload starts automatically (no separate "Upload" click needed)
+- A real progress bar advances 0→100% (XHR progress, not a fake spinner) and turns green on completion
+- The document then appears in Documents as **Processing**, flipping to **Ready** when chunks are embedded
+
+- [ ] Pass  [ ] Fail
+
+### E3. "Processing" state is explained
+
+**Steps:**
+1. Upload a multi-page PDF and watch the Documents list
+
+**Expected:**
+- The row shows **Processing** with a hint that parsing/embedding runs in the background
+- It becomes **Ready** without a manual refresh
+
+- [ ] Pass  [ ] Fail
+
+### E4. Concurrent uploads do not take the API down ⭐
+
+> This is the regression that twice took the API down. The fix: commit the
+> document before scheduling the background task, serialize processing with a
+> `Semaphore(1)`, and offload PII/chunking to threads (`asyncio.to_thread`).
+
+**Steps:**
+1. Select 3–5 files and upload them in quick succession
+2. While they process, in another tab load the workspace switcher and your profile
+
+**Expected:**
+- Every upload persists (no 202-then-vanish — all rows appear in Documents)
+- The workspace list and profile keep responding throughout (the event loop is never blocked)
+- All documents reach **Ready**; the API container does not restart
+
+**Evidence:** `docker logs wekala-api --since 2m` shows no unhandled exception / restart; all `kb_documents` rows reach `status='ready'`
+
+- [ ] Pass  [ ] Fail
+
+### E5. Grid / table toggle
+
+**Steps:**
+1. On the Documents tab, toggle between grid (cards) and table views
+
+**Expected:**
+- The toggle swaps layout in place; both views show filename, status, page/token counts, and a delete action
+
+- [ ] Pass  [ ] Fail
+
+### E6. Delete confirm dialog
+
+**Steps:**
+1. Delete a document; observe the confirmation dialog
+
+**Expected:**
+- A centered confirm dialog appears (not a native `confirm()`); cancelling aborts
+- Confirming removes the row, its chunks, and the storage object (as in §10 above)
+
+- [ ] Pass  [ ] Fail
+
+### E7. OCR-skip when Tesseract is absent
+
+**Steps:**
+1. With no `tesseract` binary in the API container, upload an image-only PDF
+
+**Expected:**
+- Processing completes (it does not hang the event loop decoding page images)
+- The document reaches **Ready** with a short preview text rather than blocking
+- `docker logs wekala-api` shows no per-page OCR work attempted
+
+- [ ] Pass  [ ] Fail  [ ] Skipped (Tesseract present)
+
+### E8. Storage bucket self-heal
+
+**Steps:**
+1. On a fresh stack where the `wekala-documents` bucket does not yet exist, upload a document
+
+**Expected:**
+- The bucket is created idempotently on first `put`; upload succeeds (no 400/500 from supabase-storage)
+- A second upload reuses the bucket without re-creating it
+
+- [ ] Pass  [ ] Fail

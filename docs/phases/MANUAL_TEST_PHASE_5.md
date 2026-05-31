@@ -145,3 +145,63 @@ as follow-on work. The core framework (this slice) does not depend on them:
    tool authoring. Usability improvement, not a blocker.
 3. **Sandbox quota not yet wired** — Phase 2's per-user daily quota does not
    currently count tool invocations. Track separately.
+
+---
+
+## Post-Phase-5 extension — MCP Streamable-HTTP, Tier-1 auth, tools playground, images
+
+> Added 2026-05-30 (commit e72f91c, tag `mcp-tier1-auth`). Covers the full
+> Streamable-HTTP transport for real-world MCP servers, optional static-token
+> auth (Tier 1), the schema-driven tool playground, and inline image results.
+> Tier-1 tokens are Fernet-encrypted at rest and never returned to the client.
+
+### E1. Streamable-HTTP discovery (no-auth public server)
+
+- [ ] Register an MCP server `DeepWiki`, URL `https://mcp.deepwiki.com/mcp` → **201**
+- [ ] Click **Discover** → tools appear (e.g. `read_wiki_structure`, `read_wiki_contents`, `ask_question`)
+- [ ] Invoke `ask_question` with a real arg → **200**, prose answer (regression: the SSE `\r\n` multi-event parse must not fail with "no matching JSON-RPC message")
+- [ ] `Context7` (`https://mcp.context7.com/mcp`), `Microsoft Learn`, `GitMCP`, `Cloudflare Docs`, `Grep` also discover successfully
+
+### E2. Tier-1 token auth (Hugging Face)
+
+- [ ] Register an MCP server `Hugging Face`, URL `https://huggingface.co/mcp`, **with** an `hf_…` token in the Auth token field → **201**
+- [ ] The row shows a **Lock / "authenticated"** badge; `GET .../mcp-servers` returns `has_auth: true` and **never** the token value
+- [ ] Click **Discover** → token-gated tools appear (≈8)
+- [ ] Register the same HF server **without** a token → discovery returns fewer/zero tools (proves the token is actually being sent)
+
+**Evidence:** `mcp_servers.auth_value_encrypted` is non-null bytes (Fernet ciphertext), not the plaintext token; no API response body contains the token string
+
+### E3. Tools grouped by server (UI)
+
+- [ ] The Tools page groups tools into collapsible per-server sections
+- [ ] Each section header shows the server name + a status badge; collapse/expand persists during the session
+- [ ] Built-in `wekala-mcp-time` and external servers each get their own group
+
+### E4. Schema-driven tool playground
+
+- [ ] Grant a tool to an agent, open its **Run** panel → a form is generated from the tool's JSON Schema (correct field types, required markers)
+- [ ] The dialog is responsive and scrolls internally (`max-h-[85vh]`) on a small viewport — no clipped Run button
+- [ ] Submit valid args → result renders; submit missing-required → client-side validation blocks before invoke
+
+### E5. Image results render inline ⭐
+
+> Image-output tools (e.g. an HF image generator) return either base64 image
+> blocks or a URL to an auth-gated file. The backend SSRF-guards + fetches URL
+> images with the server's token and base64-inlines them, so the browser
+> `<img>` needs no token (fixes the earlier 403).
+
+- [ ] Invoke an image-generating tool → the image renders inline as a `<figure>` card (not a raw URL string)
+- [ ] A **Download** control saves the image; an image icon marks the result
+- [ ] The browser never requests the original auth-gated URL directly (Network tab: the `<img>` src is a `data:` URL)
+- [ ] Cap respected: at most a few images inlined (≤ 4 / ≤ 8 MB); extras degrade gracefully
+
+### E6. Friendly transient-GPU error
+
+- [ ] Invoke an HF GPU tool while the Space is cold/busy → instead of a raw `Tool invocation failed: AcceleratorError …`, the UI shows a friendly "the tool isn't available right now — try clicking Run again" message
+- [ ] Retrying after a moment succeeds
+
+### E7. Security regressions
+
+- [ ] SSRF guard still rejects private/loopback/metadata URLs at registration (re-run §1) — the new transport did not weaken it
+- [ ] The image-inlining fetch is SSRF-guarded too (it only fetches URLs the trusted server returned, and the token is only sent to those)
+- [ ] Token never appears in `audit_log`, logs, or any API response
