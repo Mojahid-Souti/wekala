@@ -302,16 +302,19 @@ Format:
   - **Shared-canvas multi-tenancy gap** — see `memory/project-n8n-multitenancy.md`. Per-user isolation works via the bridge, but the embedded canvas still shares state in ways that block a clean multi-user demo. Production must use n8n Embed Edition or harden the bridge.
 - ADRs added: —
 
-## Phase 13 — App shell + dashboard (partial)
+## Phase 13 — App shell + dashboard + tabbed settings
 
 - Started: 2026-05-25
-- Completed: — (partial — no `-complete` tag yet)
-- Tag: —
+- Completed: 2026-06-01
+- Tag: phase-13-complete
 - Notes:
-  - Shipped: collapsible sidebar + branded header + Cmd/Ctrl-K command palette (`1ba0789`); dashboard hero greeting by `full_name` from the JWT (`5dca50e`); neutral workspace-home redesign with stat tiles + role dropdown (`bb62070`).
+  - Earlier: collapsible sidebar + branded header + Cmd/Ctrl-K command palette (`1ba0789`); dashboard hero greeting by `full_name` from the JWT (`5dca50e`); neutral workspace-home redesign with stat tiles + role dropdown (`bb62070`). Dashboard recent-activity reads from `audit_log`; breadcrumb auto-derives from the path; sidebar collapse state persists (localStorage) with animated content-shift — the "collapse polish" item was already satisfied.
+  - **Settings tabs (this pass):** routed sub-tabs under `/settings` (`General / Members / Developer / Danger zone`) with a shared `settings/layout.tsx` tab-bar; **role-gated** (admin-only tabs hidden + a guard that bounces non-admins to General — server/OPA stays the real boundary). Sidebar Admin group → a collapsible **Settings** parent (General/Members/Developer). All four tabs use a wide (`max-w-[1400px]`, home-matching) two-column `SettingsSection` layout (label left / controls right). Developer page moved off the legacy indigo styling onto the neutral system.
+  - **Member identity:** `GET /members` now returns `email` + `full_name`, resolved through the `AuthService` adapter (`get_users_by_ids`, parallel GoTrue admin calls — O(n) over bounded members, not N+1; `UserResult.full_name` added). Workspace home + Members tab show real names/avatars instead of UUIDs. Member-management UI consolidated into one shared module (`components/workspace/members.tsx`); the home is now a read-only preview, killing the home↔members duplication. `/members` route → redirect into the tab.
+  - **Ops:** `make health` now flags an empty OPA policy set (was reporting ✓ on `/health` even with zero policies) — see [[project-opa-policy-reload]].
 - Outstanding:
-  - Workspace **settings tabs** (General / Members / Developer / Danger zone) not yet split.
-  - Sidebar collapse-state polish.
+  - Sidebar Admin group itself isn't role-gated (a non-admin sees the links but the page guard bounces them); fine for the POC.
+  - Members endpoint does one GoTrue admin call per member; revisit with a batch/cached lookup if member counts grow.
 - ADRs added: —
 
 ## Phase 6 ext — LLM-driven gatekeeper
