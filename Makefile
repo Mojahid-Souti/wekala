@@ -137,6 +137,12 @@ health: ## Check health of all services
 	@$(MAKE) -s _check SVC="Wekala API"        URL="http://localhost:8001/healthz"
 	@$(MAKE) -s _check SVC="Wekala Web"        URL="http://localhost:3002/"
 	@$(MAKE) -s _check SVC="OPA"               URL="http://localhost:8181/health"
+	@printf "  %-20s " "OPA policies"; \
+	  if curl -s --connect-timeout 5 --max-time 10 http://localhost:8181/v1/policies 2>/dev/null | grep -q '"id"'; then \
+	    printf "$(GREEN)✓$(RESET) loaded\n"; \
+	  else \
+	    printf "✗ %-18s none loaded — run: docker compose restart opa\n" ""; \
+	  fi
 	@echo ""
 
 .PHONY: _check
