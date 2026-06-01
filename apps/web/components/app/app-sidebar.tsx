@@ -17,6 +17,7 @@ import {
   Pencil,
   Send,
   Settings,
+  SlidersHorizontal,
   Sparkles,
   Store,
   Users,
@@ -129,9 +130,33 @@ function useNavGroups(workspaceId: string | null): NavGroup[] {
         label: "Admin",
         items: ws
           ? [
-              leaf(ROUTES.workspaceMembers, Users, "Members"),
-              leaf(ROUTES.workspaceSettings, Settings, "Workspace settings"),
-              leaf(ROUTES.workspaceDeveloper, Code2, "Developer"),
+              {
+                kind: "parent",
+                href: ROUTES.workspaceSettings(ws),
+                icon: Settings,
+                label: "Settings",
+                children: [
+                  {
+                    kind: "leaf",
+                    href: ROUTES.workspaceSettings(ws),
+                    icon: SlidersHorizontal,
+                    label: "General",
+                    exact: true,
+                  },
+                  {
+                    kind: "leaf",
+                    href: ROUTES.workspaceMembers(ws),
+                    icon: Users,
+                    label: "Members",
+                  },
+                  {
+                    kind: "leaf",
+                    href: ROUTES.workspaceDeveloper(ws),
+                    icon: Code2,
+                    label: "Developer",
+                  },
+                ],
+              },
             ]
           : [],
       },

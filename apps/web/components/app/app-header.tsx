@@ -30,6 +30,7 @@ const STATIC_LABELS: Record<string, string> = {
   members: "Members",
   settings: "Settings",
   developer: "Developer",
+  danger: "Danger zone",
   vetting: "Vetting",
   "mcp-servers": "MCP servers",
   new: "New",

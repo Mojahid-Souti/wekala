@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from typing import Any
 
@@ -7,10 +8,15 @@ from wekala.adapters.auth.base import AuthService, SessionResult, UserResult
 
 
 def _parse_user(data: dict[str, Any]) -> UserResult:
+    # GoTrue returns the profile metadata under "user_metadata" (REST) or
+    # "raw_user_meta_data" (admin); full_name is set at signup (see sign_up).
+    meta = data.get("user_metadata") or data.get("raw_user_meta_data") or {}
+    full_name = meta.get("full_name") if isinstance(meta, dict) else None
     return UserResult(
         id=uuid.UUID(data["id"]),
         email=data["email"],
         email_confirmed=bool(data.get("email_confirmed_at")),
+        full_name=(full_name or None),
     )
 
 
@@ -75,6 +81,31 @@ class SupabaseAuthAdapter:
         )
         r.raise_for_status()
         return _parse_user(r.json())
+
+    async def get_users_by_ids(self, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, UserResult]:
+        """Resolve identities (email + full_name) for a set of users via the
+        GoTrue admin API.
+
+        One admin call per id, issued concurrently. n is the number of members
+        in a workspace — small and bounded — so this is O(n) parallel network
+        calls, not an N+1 serialized loop. Missing/failed lookups are omitted
+        from the map; callers treat an absent id as "identity unknown" rather
+        than failing the whole request.
+        """
+        unique_ids = list(dict.fromkeys(user_ids))
+        if not unique_ids:
+            return {}
+
+        async def _fetch(uid: uuid.UUID) -> UserResult | None:
+            try:
+                r = await self._client.get(f"/admin/users/{uid}")
+                r.raise_for_status()
+            except httpx.HTTPError:
+                return None
+            return _parse_user(r.json())
+
+        results = await asyncio.gather(*(_fetch(uid) for uid in unique_ids))
+        return {u.id: u for u in results if u is not None}
 
     async def admin_delete_user(self, user_id: uuid.UUID) -> None:
         r = await self._client.delete(f"/admin/users/{user_id}")

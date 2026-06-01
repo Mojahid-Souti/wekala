@@ -59,6 +59,16 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   return res.json() as Promise<T>;
 }
 
+export type MemberOut = {
+  user_id: string;
+  role: string;
+  invited_by: string | null;
+  // Identity resolved server-side via the AuthService adapter on list; absent
+  // (null) when the auth provider can't resolve the id.
+  email?: string | null;
+  full_name?: string | null;
+};
+
 export type AgentOut = {
   id: string;
   workspace_id: string;
@@ -187,13 +197,9 @@ export const api = {
       request<void>(`/v1/workspaces/${workspaceId}`, { method: "DELETE" }, token),
     members: {
       list: (workspaceId: string, token: string) =>
-        request<{ user_id: string; role: string; invited_by: string | null }[]>(
-          `/v1/workspaces/${workspaceId}/members`,
-          {},
-          token
-        ),
+        request<MemberOut[]>(`/v1/workspaces/${workspaceId}/members`, {}, token),
       invite: (workspaceId: string, userId: string, role: string, token: string) =>
-        request<{ user_id: string; role: string; invited_by: string | null }>(
+        request<MemberOut>(
           `/v1/workspaces/${workspaceId}/members`,
           { method: "POST", body: JSON.stringify({ user_id: userId, role }) },
           token

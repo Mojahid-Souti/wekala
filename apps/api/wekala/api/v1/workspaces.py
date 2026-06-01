@@ -5,8 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from wekala.adapters.auth.base import UserResult
-from wekala.api.deps import check_opa, get_current_user, require_workspace_role
+from wekala.adapters.auth.base import AuthService, UserResult
+from wekala.api.deps import (
+    check_opa,
+    get_auth_service,
+    get_current_user,
+    require_workspace_role,
+)
 from wekala.core.constants import Action, Role
 from wekala.db.models import ApiKey, Membership, Workspace
 from wekala.db.repositories.membership import MembershipRepository
@@ -68,6 +73,10 @@ class MemberOut(BaseModel):
     user_id: uuid.UUID
     role: str
     invited_by: uuid.UUID | None
+    # Identity is resolved through the AuthService adapter on list (not stored
+    # locally). None when the auth provider can't resolve the id.
+    email: str | None = None
+    full_name: str | None = None
 
     @classmethod
     def from_model(cls, m: Membership) -> "MemberOut":
@@ -196,10 +205,24 @@ async def list_members(
     workspace_id: uuid.UUID,
     caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.VIEWER))],
     db: Annotated[AsyncSession, Depends(get_db)],
+    auth: Annotated[AuthService, Depends(get_auth_service)],
 ) -> list[MemberOut]:
     repo = MembershipRepository(db)
     members = await repo.list_for_workspace(workspace_id)
-    return [MemberOut.from_model(m) for m in members]
+    identities = await auth.get_users_by_ids([m.user_id for m in members])
+    out: list[MemberOut] = []
+    for m in members:
+        ident = identities.get(m.user_id)
+        out.append(
+            MemberOut(
+                user_id=m.user_id,
+                role=m.role,
+                invited_by=m.invited_by,
+                email=ident.email if ident else None,
+                full_name=ident.full_name if ident else None,
+            )
+        )
+    return out
 
 
 @router.put("/{workspace_id}/members/{user_id}", response_model=MemberOut)

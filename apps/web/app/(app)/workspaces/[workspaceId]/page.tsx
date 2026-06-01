@@ -1,55 +1,19 @@
 "use client";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RoleChip, memberDisplayName, memberInitials } from "@/components/workspace/members";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
-import { useToast } from "@/lib/toast";
 import { useToken } from "@/lib/use-token";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowRight,
-  Check,
-  ChevronDown,
-  Compass,
-  FileUp,
-  Loader2,
-  Plus,
-  ShieldCheck,
-  Users,
-  Wand2,
-} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, Compass, FileUp, Plus, ShieldCheck, Users, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
-
-const ROLES = ["viewer", "builder", "reviewer", "hirer", "admin"] as const;
-type Role = (typeof ROLES)[number];
-
-const ROLE_LABELS: Record<Role, { title: string; description: string }> = {
-  viewer: { title: "Viewer", description: "Read-only access to workspace content" },
-  builder: { title: "Builder", description: "Create and edit agents" },
-  reviewer: { title: "Reviewer", description: "Approve or reject vetted agents" },
-  hirer: { title: "Hirer", description: "Browse the Bazaar and hire agents" },
-  admin: { title: "Admin", description: "Full workspace control" },
-};
 
 export default function WorkspaceHomePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const token = useToken();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<Role>("viewer");
-  const [inviteError, setInviteError] = useState("");
 
   const { data: workspace, isLoading: wsLoading } = useQuery({
     queryKey: ["workspace", workspaceId],
@@ -69,39 +33,6 @@ export default function WorkspaceHomePage() {
     enabled: !!token,
   });
 
-  const inviteMutation = useMutation({
-    mutationFn: async () => {
-      const user = await api.users.lookup(inviteEmail, token);
-      return api.workspaces.members.invite(workspaceId, user.id, inviteRole, token);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspace-members", workspaceId] });
-      setInviteEmail("");
-      setInviteError("");
-      toast("Member invited successfully", "success");
-    },
-    onError: (err) => {
-      setInviteError(err instanceof Error ? err.message : "Invite failed");
-    },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: (userId: string) => api.workspaces.members.remove(workspaceId, userId, token),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspace-members", workspaceId] });
-      toast("Member removed", "info");
-    },
-    onError: (err) => {
-      toast(err instanceof Error ? err.message : "Remove failed", "error");
-    },
-  });
-
-  function handleInvite(e: React.FormEvent) {
-    e.preventDefault();
-    setInviteError("");
-    inviteMutation.mutate();
-  }
-
   if (!token || wsLoading) {
     return (
       <div className="mx-auto w-full max-w-[1400px] space-y-8 px-5 py-6 lg:px-7">
@@ -117,6 +48,9 @@ export default function WorkspaceHomePage() {
       </div>
     );
   }
+
+  const memberCount = members?.length ?? 0;
+  const previewMembers = members?.slice(0, 6) ?? [];
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-8 px-5 py-6 lg:px-7">
@@ -142,7 +76,7 @@ export default function WorkspaceHomePage() {
         <StatTile
           icon={<Users className="size-4" />}
           label="Members"
-          value={members?.length ?? 0}
+          value={memberCount}
           loading={membersLoading}
           href={ROUTES.workspaceMembers(workspaceId)}
         />
@@ -182,111 +116,64 @@ export default function WorkspaceHomePage() {
         </div>
       </section>
 
-      {/* Members + invite — side-by-side at lg, stacked below. */}
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* Members list */}
-        <div className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-              Members ({members?.length ?? 0})
-            </h2>
-            <Link
-              href={ROUTES.workspaceMembers(workspaceId)}
-              className="inline-flex items-center gap-1 text-xs font-medium text-neutral-700 hover:text-neutral-900"
-            >
-              Manage all
-              <ArrowRight className="size-3" />
-            </Link>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-            {membersLoading ? (
-              <div className="px-5 py-4 text-sm text-neutral-400">Loading members…</div>
-            ) : members && members.length > 0 ? (
-              <ul className="divide-y divide-neutral-100">
-                {members.map((m) => (
-                  <li
-                    key={m.user_id}
-                    className="flex items-center justify-between gap-3 px-5 py-3.5"
-                  >
+      {/* Members preview — full management lives under Settings → Members. */}
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            Members ({memberCount})
+          </h2>
+          <Link
+            href={ROUTES.workspaceMembers(workspaceId)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-neutral-700 hover:text-neutral-900"
+          >
+            Manage members
+            <ArrowRight className="size-3" />
+          </Link>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+          {membersLoading ? (
+            <div className="px-5 py-4 text-sm text-neutral-400">Loading members…</div>
+          ) : previewMembers.length > 0 ? (
+            <ul className="divide-y divide-neutral-100">
+              {previewMembers.map((m) => {
+                const hasName = !!(m.full_name?.trim() && m.email?.trim());
+                return (
+                  <li key={m.user_id} className="flex items-center justify-between gap-3 px-5 py-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <Avatar className="size-9 shrink-0">
                         <AvatarFallback className="bg-neutral-100 text-xs font-medium text-neutral-700">
-                          {initials(m.user_id)}
+                          {memberInitials(m)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <p className="truncate font-mono text-xs text-neutral-700">
-                          {shortenId(m.user_id)}
+                        <p className="truncate text-sm font-medium text-neutral-900">
+                          {memberDisplayName(m)}
                         </p>
-                        <RoleChip role={m.role} />
+                        {hasName && <p className="truncate text-xs text-neutral-500">{m.email}</p>}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeMutation.mutate(m.user_id)}
-                      disabled={removeMutation.isPending}
-                      className="text-xs font-medium text-neutral-500 transition-colors hover:text-rose-600 disabled:opacity-40"
-                    >
-                      Remove
-                    </button>
+                    <RoleChip role={m.role} />
                   </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="px-5 py-8 text-center text-sm text-neutral-500">
-                No members yet — invite someone to get started.
-              </div>
-            )}
-          </div>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="px-5 py-8 text-center text-sm text-neutral-500">
+              No members yet — invite someone from Settings → Members.
+            </div>
+          )}
         </div>
-
-        {/* Invite form */}
-        <div className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-            Invite a member
-          </h2>
-          <form
-            onSubmit={handleInvite}
-            className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5"
-          >
-            {inviteError && (
-              <Alert variant="destructive" className="border-rose-200 bg-rose-50 text-rose-900">
-                <AlertDescription>{inviteError}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="invite-email"
-                className="block text-[11px] font-medium uppercase tracking-wider text-neutral-500"
-              >
-                Email address
-              </label>
-              <input
-                id="invite-email"
-                type="email"
-                required
-                placeholder="colleague@example.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="block w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-sm leading-relaxed text-neutral-900 placeholder:text-neutral-400 transition-colors focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/5"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <span className="block text-[11px] font-medium uppercase tracking-wider text-neutral-500">
-                Role
-              </span>
-              <RoleDropdown value={inviteRole} onChange={setInviteRole} />
-            </div>
-            <button
-              type="submit"
-              disabled={inviteMutation.isPending || !inviteEmail}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50"
+        {memberCount > previewMembers.length && (
+          <p className="text-xs text-neutral-400">
+            Showing {previewMembers.length} of {memberCount}.{" "}
+            <Link
+              href={ROUTES.workspaceMembers(workspaceId)}
+              className="font-medium text-neutral-600 hover:text-neutral-900"
             >
-              {inviteMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
-              {inviteMutation.isPending ? "Inviting…" : "Send invite"}
-            </button>
-          </form>
-        </div>
+              View all
+            </Link>
+          </p>
+        )}
       </section>
     </div>
   );
@@ -295,21 +182,6 @@ export default function WorkspaceHomePage() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function initials(uuid: string): string {
-  // UUIDs aren't names, but the first two hex chars are stable per user and
-  // give the avatar visual variety. Cheap, until the backend ships an email
-  // on the members payload (one-line backend change, separate task).
-  return uuid
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function shortenId(uuid: string): string {
-  if (uuid.length <= 16) return uuid;
-  return `${uuid.slice(0, 8)}…${uuid.slice(-4)}`;
-}
 
 function StatTile({
   icon,
@@ -397,63 +269,5 @@ function ActionTile({
         {description}
       </p>
     </Link>
-  );
-}
-
-function RoleChip({ role }: { role: string }) {
-  return (
-    <span className="mt-0.5 inline-flex items-center rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-neutral-600">
-      {role}
-    </span>
-  );
-}
-
-function RoleDropdown({
-  value,
-  onChange,
-}: {
-  value: Role;
-  onChange: (r: Role) => void;
-}) {
-  const current = ROLE_LABELS[value];
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="flex w-full items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-left text-sm text-neutral-900 transition-colors hover:border-neutral-300 focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/5 data-[state=open]:border-neutral-900"
-        >
-          <span className="min-w-0">
-            <span className="block font-medium text-neutral-900">{current.title}</span>
-            <span className="block truncate text-xs text-neutral-500">{current.description}</span>
-          </span>
-          <ChevronDown className="size-4 shrink-0 text-neutral-400" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="w-[var(--radix-dropdown-menu-trigger-width)] p-1"
-      >
-        {ROLES.map((r) => {
-          const info = ROLE_LABELS[r];
-          const isSelected = r === value;
-          return (
-            <DropdownMenuItem
-              key={r}
-              onSelect={() => onChange(r)}
-              className="flex cursor-pointer items-start gap-3 rounded-md px-2.5 py-2 focus:bg-neutral-100"
-            >
-              <span className="grid size-4 shrink-0 place-items-center pt-0.5">
-                {isSelected && <Check className="size-3.5 text-neutral-900" />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-neutral-900">{info.title}</span>
-                <span className="block text-xs text-neutral-500">{info.description}</span>
-              </span>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

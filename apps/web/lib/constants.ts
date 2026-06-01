@@ -8,7 +8,9 @@ export const ROUTES = {
   dashboard: "/dashboard",
   newWorkspace: "/workspaces/new",
   workspace: (workspaceId: string) => `/workspaces/${workspaceId}`,
-  workspaceMembers: (workspaceId: string) => `/workspaces/${workspaceId}/members`,
+  // Members live under the Settings tabs now. The legacy /members route still
+  // exists as a redirect for stale links/bookmarks.
+  workspaceMembers: (workspaceId: string) => `/workspaces/${workspaceId}/settings/members`,
   agents: (workspaceId: string) => `/workspaces/${workspaceId}/agents`,
   // "New agent" now lands on the templates picker (polished UI). The
   // legacy /agents/new route still exists as a redirect for stale links.
@@ -26,6 +28,7 @@ export const ROUTES = {
   commandCenter: (workspaceId: string) => `/workspaces/${workspaceId}/command-center`,
   workspaceSettings: (workspaceId: string) => `/workspaces/${workspaceId}/settings`,
   workspaceDeveloper: (workspaceId: string) => `/workspaces/${workspaceId}/settings/developer`,
+  workspaceDanger: (workspaceId: string) => `/workspaces/${workspaceId}/settings/danger`,
   tools: (workspaceId: string) => `/workspaces/${workspaceId}/tools`,
   mcpServers: (workspaceId: string) => `/workspaces/${workspaceId}/tools/mcp-servers`,
   agentTools: (workspaceId: string, agentId: string) =>

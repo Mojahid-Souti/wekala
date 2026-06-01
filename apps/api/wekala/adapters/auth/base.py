@@ -8,6 +8,7 @@ class UserResult:
     id: uuid.UUID
     email: str
     email_confirmed: bool
+    full_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class AuthService(Protocol):
     async def reset_password(self, email: str) -> None: ...
 
     async def get_user(self, access_token: str) -> UserResult: ...
+
+    async def get_users_by_ids(self, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, UserResult]: ...
 
     async def admin_delete_user(self, user_id: uuid.UUID) -> None: ...
 
