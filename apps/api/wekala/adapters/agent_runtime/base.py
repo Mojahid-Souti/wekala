@@ -3,6 +3,7 @@
 DifyAdapter implements this now. Future adapters (LangGraph, custom) swap in via config.
 """
 
+from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
 
@@ -18,6 +19,15 @@ class AgentRuntime(Protocol):
 
     async def invoke_sandbox(self, app_id: str, query: str, user_id: str) -> dict:  # type: ignore[type-arg]
         """Run a non-streaming sandbox invocation. Returns {"answer": str, "usage": {...}}."""
+        ...
+
+    def stream_sandbox(  # type: ignore[type-arg]
+        self, app_id: str, query: str, user_id: str
+    ) -> AsyncIterator[dict]:
+        """Streaming sandbox invocation. Async-yields ``{"token": str}`` chunks as
+        they arrive, then a final ``{"usage": {...}}``. (Declared non-async because
+        the implementation is an async generator — calling it returns the iterator.)
+        """
         ...
 
     async def validate_dsl(self, dsl: dict) -> list[str]:  # type: ignore[type-arg]

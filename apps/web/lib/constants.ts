@@ -12,9 +12,8 @@ export const ROUTES = {
   // exists as a redirect for stale links/bookmarks.
   workspaceMembers: (workspaceId: string) => `/workspaces/${workspaceId}/settings/members`,
   agents: (workspaceId: string) => `/workspaces/${workspaceId}/agents`,
-  // "New agent" now lands on the templates picker (polished UI). The
-  // legacy /agents/new route still exists as a redirect for stale links.
-  newAgent: (workspaceId: string) => `/workspaces/${workspaceId}/agents/templates`,
+  // "New agent" lands on the 3-tab create page (Template / Upload / Build in Dify).
+  newAgent: (workspaceId: string) => `/workspaces/${workspaceId}/agents/new`,
   agentsBuild: (workspaceId: string) => `/workspaces/${workspaceId}/agents/build`,
   agentsTemplates: (workspaceId: string) => `/workspaces/${workspaceId}/agents/templates`,
   agentsImport: (workspaceId: string) => `/workspaces/${workspaceId}/agents/import`,

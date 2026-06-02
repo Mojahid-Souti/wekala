@@ -6,7 +6,10 @@ Auth enforced via require_workspace_role (same pattern as workspaces.py).
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -20,6 +23,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +39,7 @@ from wekala.db.session import get_db
 from wekala.services.agent_service import AgentService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _YAML_MAX_BYTES = 1_048_576  # 1 MiB — also enforced in yaml_validator but checked here first
 
@@ -511,6 +516,57 @@ async def test_agent(
     user, _ = caller
     svc = AgentService(db, _runtime())
     return await svc.test_sandbox(agent=agent, actor_id=user.id, query=body.query)
+
+
+@router.post("/workspaces/{workspace_id}/agents/{agent_id}/test-stream")
+async def test_agent_stream(
+    workspace_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    body: TestAgentIn,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    agent: Annotated[Agent, Depends(_get_agent)],
+) -> StreamingResponse:
+    """Sandbox streaming test (SSE). Same 100/day quota as ``/test``.
+
+    Relays Dify's token stream as ``data: {"token": "…"}`` frames and a terminal
+    ``data: {"done": true, "usage": {…}}``. Quota (429), registration (503/409),
+    and other pre-stream failures surface as normal JSON status codes because the
+    generator is primed once before the response starts. O(log n) quota check.
+    """
+    user, _ = caller
+    svc = AgentService(db, _runtime())
+    agen = svc.stream_sandbox(agent=agent, actor_id=user.id, query=body.query)
+
+    # Prime once: quota/registration checks run here, so their HTTPExceptions are
+    # raised before the 200 + body start and become proper 429/503/409 responses.
+    try:
+        first: dict[str, Any] | None = await agen.__anext__()
+    except StopAsyncIteration:
+        first = None
+
+    def _frame(item: dict[str, Any]) -> str:
+        if "usage" in item:
+            return f"data: {json.dumps({'done': True, 'usage': item['usage']})}\n\n"
+        return f"data: {json.dumps(item)}\n\n"
+
+    async def _sse() -> AsyncIterator[str]:
+        try:
+            if first is not None:
+                yield _frame(first)
+            async for item in agen:
+                yield _frame(item)
+            yield 'data: {"done": true}\n\n'
+        except Exception:
+            logger.exception("agent test-stream failed mid-stream")
+            yield 'data: {"error": "stream_failed"}\n\n'
+            yield 'data: {"done": true}\n\n'
+
+    return StreamingResponse(
+        _sse(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/templates", response_model=list[TemplateOut])

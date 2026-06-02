@@ -4,7 +4,9 @@ Token is read from settings at startup; never forwarded to the frontend.
 All I/O is async via httpx.AsyncClient.
 """
 
+import json
 import logging
+from collections.abc import AsyncIterator
 
 import httpx
 
@@ -14,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_MODES = {"chat", "completion", "agent-chat", "workflow", "advanced-chat"}
 _TIMEOUT = httpx.Timeout(30.0)
+# Streaming: disable the read timeout so a slow LLM token stream isn't killed
+# mid-response; keep finite connect/write/pool bounds.
+_STREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=None, write=10.0, pool=10.0)
 
 
 class DifyAdapter:
@@ -70,6 +75,51 @@ class DifyAdapter:
             r.raise_for_status()
             data = r.json()
             return {"answer": data.get("answer", ""), "usage": data.get("metadata", {})}
+
+    async def stream_sandbox(  # type: ignore[type-arg]
+        self, app_id: str, query: str, user_id: str
+    ) -> AsyncIterator[dict]:
+        """Streaming sandbox chat — relays Dify's native SSE stream.
+
+        Async-yields ``{"token": chunk}`` per answer fragment, then
+        ``{"usage": {...}}`` on ``message_end``. Raises on an ``error`` event.
+        Time: O(1) network; latency dominated by LLM inference.
+        """
+        async with (
+            self._client() as client,
+            client.stream(
+                "POST",
+                f"{self._base}/v1/chat-messages",
+                headers={**self._headers, "Authorization": f"Bearer {app_id}"},
+                json={
+                    "query": query,
+                    "user": user_id,
+                    "response_mode": "streaming",
+                    "inputs": {},
+                },
+                timeout=_STREAM_TIMEOUT,
+            ) as r,
+        ):
+            r.raise_for_status()
+            async for line in r.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue  # skip SSE comments / ping / blank separators
+                payload = line[len("data:") :].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    event = json.loads(payload)
+                except ValueError:
+                    continue
+                etype = event.get("event")
+                if etype in ("message", "agent_message"):
+                    chunk = event.get("answer", "")
+                    if chunk:
+                        yield {"token": chunk}
+                elif etype == "message_end":
+                    yield {"usage": event.get("metadata", {})}
+                elif etype == "error":
+                    raise RuntimeError(event.get("message", "dify stream error"))
 
     async def validate_dsl(self, dsl: dict) -> list[str]:  # type: ignore[type-arg]
         """Static validation of DSL dict. Returns error list; empty = valid. O(1)."""

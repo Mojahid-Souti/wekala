@@ -12,9 +12,12 @@ All state-changing methods write an audit log entry as fire-and-forget.
 
 from __future__ import annotations
 
+import logging
 import uuid
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
+import httpx
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +40,9 @@ from wekala.db.repositories.agent import AgentRepository
 from wekala.db.repositories.agent_import import AgentImportRepository
 from wekala.db.repositories.agent_version import AgentVersionRepository
 from wekala.db.repositories.audit import AuditRepository
+from wekala.db.session import AsyncSessionLocal
+
+logger = logging.getLogger(__name__)
 
 _ALLOWED_TRANSITIONS: dict[AgentStatus, set[AgentStatus]] = {
     AgentStatus.DRAFT: {AgentStatus.PUBLISHED, AgentStatus.ARCHIVED},
@@ -241,6 +247,11 @@ class AgentService:
             # Approved → unvetted forces a fresh submit-for-review before publish.
             if agent.vetting_status in ("approved", "ready_for_review", "rejected"):
                 fields["vetting_status"] = "unvetted"
+            # A DSL change invalidates the registered Dify app: store the new DSL
+            # and clear dify_app_id so the next sandbox test re-registers (Phase 14).
+            if dify_dsl is not None:
+                fields["dify_dsl"] = dify_dsl
+                fields["dify_app_id"] = None
             agent = await self._agents.update(agent, **fields)
             await self._audit.record(
                 action=Action.AGENT_UPDATE,
@@ -389,6 +400,9 @@ class AgentService:
                 version=new_version_num,
                 name=snap.name,
                 description=snap.description,
+                # Restore the snapshot's DSL and force a re-register on next test.
+                dify_dsl=snap.dify_dsl,
+                dify_app_id=None,
             )
             await self._audit.record(
                 action=Action.AGENT_UPDATE,
@@ -489,14 +503,10 @@ class AgentService:
                 ),
             )
 
-        if not agent.dify_app_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Agent is not registered with Dify yet",
-            )
+        app_id = await self._ensure_registered(agent)
 
         result = await self._runtime.invoke_sandbox(
-            app_id=agent.dify_app_id,
+            app_id=app_id,
             query=query,
             user_id=str(actor_id),
         )
@@ -512,9 +522,89 @@ class AgentService:
 
         return result
 
+    async def stream_sandbox(
+        self,
+        *,
+        agent: Agent,
+        actor_id: uuid.UUID,
+        query: str,
+    ) -> AsyncIterator[dict]:  # type: ignore[type-arg]
+        """Streaming sandbox invocation.
+
+        Same daily quota + lazy Dify registration as ``test_sandbox``, but
+        async-yields ``{"token": str}`` chunks then a final ``{"usage": {...}}``.
+        The ``agent.test`` audit row (which *is* the quota ledger) is written on
+        a **fresh** session only on successful completion — the request
+        transaction is already committed once streaming begins, and an
+        incomplete/cancelled stream must not burn quota. O(log n) quota check.
+        """
+        uses_today = await self._agents.count_sandbox_uses_today(actor_id, agent.workspace_id)
+        if uses_today >= settings.agent_sandbox_daily_quota:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Sandbox quota reached: {settings.agent_sandbox_daily_quota}"
+                    " invocations per day"
+                ),
+            )
+        app_id = await self._ensure_registered(agent)
+
+        # Capture before the first yield: after it, the request session is closed.
+        workspace_id = agent.workspace_id
+        agent_id = agent.id
+        completed = False
+        try:
+            async for item in self._runtime.stream_sandbox(
+                app_id=app_id, query=query, user_id=str(actor_id)
+            ):
+                yield item
+            completed = True
+        finally:
+            if completed:
+                async with AsyncSessionLocal.begin() as audit_db:
+                    await AuditRepository(audit_db).record(
+                        action=Action.AGENT_TEST,
+                        outcome=Outcome.SUCCESS,
+                        actor_user_id=actor_id,
+                        actor_workspace_id=workspace_id,
+                        resource_type=ResourceType.AGENT,
+                        resource_id=agent_id,
+                    )
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _ensure_registered(self, agent: Agent) -> str:
+        """Return a usable Dify app_id, registering the agent lazily on first use.
+
+        Fail-closed: 503 if the runtime is unconfigured (no console token) or
+        unreachable, 409 if the agent has no DSL. Never returns None, never leaks
+        the Dify response body. O(1) — one extra POST only on the first test.
+        """
+        if agent.dify_app_id:
+            return agent.dify_app_id
+        if not settings.dify_console_token:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Agent runtime is not configured",
+            )
+        if not agent.dify_dsl:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Agent has no definition to register",
+            )
+        try:
+            app_id = await self._runtime.register_app(agent.name, agent.dify_dsl)
+        except httpx.HTTPError as e:
+            logger.warning("Dify register_app failed for agent %s: %s", agent.id, e)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Agent runtime unavailable",
+            ) from e
+        async with self._db.begin_nested():
+            await self._agents.update(agent, dify_app_id=app_id)
+        return app_id
 
     def _assert_transition(self, agent: Agent, target: AgentStatus) -> None:
         current = AgentStatus(agent.status)

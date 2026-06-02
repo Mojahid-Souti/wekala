@@ -3,12 +3,28 @@
 export const dynamic = "force-dynamic";
 
 import { AgentCard } from "@/components/agent/agent-card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
 import { useToken } from "@/lib/use-token";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, FileUp, LayoutTemplate, Pencil, Plus, Search } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  FileUp,
+  LayoutTemplate,
+  Pencil,
+  Plus,
+  Search,
+} from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { use, useMemo, useState } from "react";
 
 const STATUS_FILTERS = [
@@ -19,13 +35,50 @@ const STATUS_FILTERS = [
   { value: "archived", label: "Archived" },
 ] as const;
 
+const CLASSIFICATION_OPTIONS = [
+  { value: "", label: "All" },
+  { value: "public", label: "Public" },
+  { value: "internal", label: "Internal" },
+  { value: "restricted", label: "Restricted" },
+  { value: "confidential", label: "Confidential" },
+];
+
+const VETTING_OPTIONS = [
+  { value: "", label: "All" },
+  { value: "unvetted", label: "Unvetted" },
+  { value: "ready_for_review", label: "Ready for review" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const SORT_OPTIONS = [
+  { value: "updated", label: "Recently updated" },
+  { value: "name", label: "Name (A–Z)" },
+  { value: "status", label: "Status" },
+];
+
 type Props = { params: Promise<{ workspaceId: string }> };
 
 export default function AgentsPage({ params }: Props) {
   const { workspaceId } = use(params);
   const token = useToken();
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
+
+  // Filters/sort live in the URL so they're shareable and survive Back.
+  const statusFilter = searchParams.get("status") ?? "";
+  const classFilter = searchParams.get("class") ?? "";
+  const vettingFilter = searchParams.get("vetting") ?? "";
+  const sortBy = searchParams.get("sort") ?? "updated";
+
+  function setParam(key: string, value: string) {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (value) sp.set(key, value);
+    else sp.delete(key);
+    router.replace(sp.toString() ? `${pathname}?${sp}` : pathname, { scroll: false });
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["agents", workspaceId, statusFilter],
@@ -36,11 +89,23 @@ export default function AgentsPage({ params }: Props) {
   const items = data?.items ?? [];
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (a) => a.name.toLowerCase().includes(q) || (a.description ?? "").toLowerCase().includes(q)
-    );
-  }, [items, query]);
+    const out = items.filter((a) => {
+      if (
+        q &&
+        !(a.name.toLowerCase().includes(q) || (a.description ?? "").toLowerCase().includes(q))
+      ) {
+        return false;
+      }
+      if (classFilter && (a.classification ?? "").toLowerCase() !== classFilter) return false;
+      if (vettingFilter && (a.vetting_status ?? "").toLowerCase() !== vettingFilter) return false;
+      return true;
+    });
+    return out.sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "status") return a.status.localeCompare(b.status);
+      return (b.updated_at ?? "").localeCompare(a.updated_at ?? ""); // updated desc
+    });
+  }, [items, query, classFilter, vettingFilter, sortBy]);
 
   const counts = useMemo(() => {
     const total = items.length;
@@ -51,6 +116,13 @@ export default function AgentsPage({ params }: Props) {
     }, {});
     return { total, byStatus };
   }, [items]);
+
+  const hasFilters = !!(query || statusFilter || classFilter || vettingFilter);
+
+  function clearAll() {
+    setQuery("");
+    router.replace(pathname, { scroll: false });
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-7 px-5 py-6 lg:px-7">
@@ -95,9 +167,9 @@ export default function AgentsPage({ params }: Props) {
       </section>
 
       <section className="space-y-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-sm font-semibold text-neutral-950">Your agents</h2>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <span
                 aria-hidden
@@ -110,15 +182,33 @@ export default function AgentsPage({ params }: Props) {
                 placeholder="Search agents…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="h-9 w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 text-sm text-neutral-950 placeholder:text-neutral-400 focus:border-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-200 sm:w-64"
+                className="h-9 w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 text-sm text-neutral-950 placeholder:text-neutral-400 focus:border-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-200 sm:w-56"
               />
             </div>
+            <FilterMenu
+              label="Class"
+              value={classFilter}
+              options={CLASSIFICATION_OPTIONS}
+              onChange={(v) => setParam("class", v)}
+            />
+            <FilterMenu
+              label="Vetting"
+              value={vettingFilter}
+              options={VETTING_OPTIONS}
+              onChange={(v) => setParam("vetting", v)}
+            />
+            <FilterMenu
+              label="Sort"
+              value={sortBy}
+              options={SORT_OPTIONS}
+              onChange={(v) => setParam("sort", v)}
+            />
             <div className="flex flex-wrap gap-1 rounded-lg border border-neutral-200 bg-white p-1">
               {STATUS_FILTERS.map((f) => (
                 <button
                   key={f.value || "all"}
                   type="button"
-                  onClick={() => setStatusFilter(f.value)}
+                  onClick={() => setParam("status", f.value)}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     statusFilter === f.value
                       ? "bg-neutral-950 text-white"
@@ -142,14 +232,7 @@ export default function AgentsPage({ params }: Props) {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyAgents
-            workspaceId={workspaceId}
-            filtering={!!query || !!statusFilter}
-            onClear={() => {
-              setQuery("");
-              setStatusFilter("");
-            }}
-          />
+          <EmptyAgents workspaceId={workspaceId} filtering={hasFilters} onClear={clearAll} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((agent) => (
@@ -159,6 +242,46 @@ export default function AgentsPage({ params }: Props) {
         )}
       </section>
     </div>
+  );
+}
+
+function FilterMenu({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  const current = options.find((o) => o.value === value);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:border-neutral-300 data-[state=open]:border-neutral-900"
+        >
+          <span className="text-neutral-400">{label}:</span>
+          {current?.label ?? "All"}
+          <ChevronDown className="size-3.5 text-neutral-400" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[11rem] p-1">
+        {options.map((o) => (
+          <DropdownMenuItem
+            key={o.value || "all"}
+            onSelect={() => onChange(o.value)}
+            className="flex items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-sm focus:bg-neutral-100"
+          >
+            {o.label}
+            {value === o.value && <Check className="size-3.5 text-neutral-900" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
