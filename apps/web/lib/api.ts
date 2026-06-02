@@ -28,6 +28,14 @@ function formatErrorDetail(detail: unknown, status: number): string {
       })
       .join("; ");
   }
+  // YAML import returns detail = { errors: [...] }; surface them as one line.
+  if (
+    detail &&
+    typeof detail === "object" &&
+    Array.isArray((detail as { errors?: unknown[] }).errors)
+  ) {
+    return (detail as { errors: unknown[] }).errors.map(String).join("; ");
+  }
   if (detail && typeof detail === "object") return JSON.stringify(detail);
   return `HTTP ${status}`;
 }
