@@ -7,6 +7,11 @@ from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
 
+class AgentDefinitionError(Exception):
+    """The agent's DSL can't be registered because the definition itself is
+    invalid (vs the runtime being down). Maps to a 4xx, not a 503."""
+
+
 @runtime_checkable
 class AgentRuntime(Protocol):
     async def register_app(self, name: str, dsl: dict) -> str:  # type: ignore[type-arg]

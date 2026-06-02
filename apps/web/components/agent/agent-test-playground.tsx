@@ -133,10 +133,15 @@ export function AgentTestPlayground({
 function friendly(message: string): string {
   const m = message.toLowerCase();
   if (m.includes("quota")) return message; // already a clear quota message
+  // Check "definition" before "runtime" — the invalid-definition error also
+  // contains the word "runtime".
+  if (m.includes("definition") || m.includes("422")) {
+    return "This agent's definition can't run — it isn't a valid Dify app. Re-create it from a template, or re-import a valid Dify YAML.";
+  }
   if (m.includes("not configured")) {
     return "The agent runtime isn't configured on this environment yet.";
   }
-  if (m.includes("unavailable") || m.includes("503") || m.includes("runtime")) {
+  if (m.includes("unavailable") || m.includes("503")) {
     return "The agent runtime isn't available right now — try Run again in a moment.";
   }
   if (m.includes("no definition") || m.includes("409")) {

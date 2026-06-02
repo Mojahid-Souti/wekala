@@ -21,7 +21,7 @@ import httpx
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from wekala.adapters.agent_runtime.base import AgentRuntime
+from wekala.adapters.agent_runtime.base import AgentDefinitionError, AgentRuntime
 from wekala.core.config import settings
 
 if TYPE_CHECKING:
@@ -600,6 +600,13 @@ class AgentService:
             )
         try:
             app_id = await self._runtime.register_app(agent.name, dsl)
+        except AgentDefinitionError as e:
+            # The DSL is invalid (e.g. an old simplified template, not a real
+            # Dify export) — that's a 4xx, not a runtime outage.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"This agent's definition can't run on the agent runtime: {e}",
+            ) from e
         except httpx.HTTPError as e:
             logger.warning("Dify register_app failed for agent %s: %s", agent.id, e)
             raise HTTPException(

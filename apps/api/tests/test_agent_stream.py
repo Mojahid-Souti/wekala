@@ -12,6 +12,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
+from wekala.adapters.agent_runtime.base import AgentDefinitionError
 from wekala.adapters.agent_runtime.dify import DifyAdapter
 from wekala.core.config import settings
 from wekala.services.agent_service import AgentService
@@ -131,6 +132,16 @@ async def test_ensure_registered_503_on_dify_error(monkeypatch: pytest.MonkeyPat
     with pytest.raises(HTTPException) as exc:
         await svc._ensure_registered(_agent())
     assert exc.value.status_code == 503
+
+
+async def test_ensure_registered_422_on_invalid_definition(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "dify_console_token", "tok")
+    svc = _svc()
+    _mock_version(svc, {"app": {"name": "Agent A"}})  # old/invalid DSL shape
+    svc._runtime.register_app = AsyncMock(side_effect=AgentDefinitionError("Missing model_config"))
+    with pytest.raises(HTTPException) as exc:
+        await svc._ensure_registered(_agent())
+    assert exc.value.status_code == 422
 
 
 # --- AgentService.stream_sandbox: quota -------------------------------------

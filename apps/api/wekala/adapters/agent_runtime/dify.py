@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 import yaml
 
+from wekala.adapters.agent_runtime.base import AgentDefinitionError
 from wekala.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,15 @@ _TIMEOUT = httpx.Timeout(60.0)
 # Streaming: disable the read timeout so a slow LLM token stream isn't killed
 # mid-response; keep finite connect/write/pool bounds.
 _STREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=None, write=10.0, pool=10.0)
+
+
+def _import_error(r: httpx.Response) -> str:
+    """Pull Dify's import-failure reason out of a 400 body (best-effort)."""
+    try:
+        body = r.json()
+        return str(body.get("error") or body.get("message") or "invalid Dify DSL")
+    except ValueError:
+        return "invalid Dify DSL"
 
 
 class DifyAdapter:
@@ -60,10 +70,13 @@ class DifyAdapter:
                 f"{self._base}/apps/imports",
                 json={"mode": "yaml-content", "yaml_content": yaml_content, "name": name},
             )
+            # 400 = the DSL is invalid (bad definition), not a runtime outage.
+            if r.status_code == 400:
+                raise AgentDefinitionError(_import_error(r))
             r.raise_for_status()
             data = r.json()
             if data.get("status") == "failed":
-                raise RuntimeError(f"Dify import failed: {data.get('error', 'unknown error')}")
+                raise AgentDefinitionError(data.get("error") or "import failed")
             app_id = data.get("app_id")
             if data.get("status") == "pending":
                 cr = await client.post(
