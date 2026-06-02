@@ -354,6 +354,22 @@ Format:
   - **MCP OAuth (Tier 2)** for SaaS servers (Sentry/Linear/Notion/GitHub/Atlassian) — documented in CLAUDE.md §6, a future mini-phase.
 - ADRs added: —
 
+## Phase 14 — Agent flow redesign + runnable agents (code complete; live run blocked)
+
+- Started: 2026-06-02
+- Completed: — (code complete + verified plumbing; **no `phase-14-complete` tag** — the live token-streaming run is blocked on the Dify runtime, see Outstanding)
+- Tag: —
+- Notes:
+  - **Backend (commit 8de0815):** `AgentService._ensure_registered` lazily registers an agent with Dify on first test (`register_app` existed but was never called → `dify_app_id` always NULL). `AgentRuntime.stream_sandbox` + DifyAdapter relay Dify's native SSE; new `POST .../agents/{id}/test-stream` SSE endpoint, **generator-primed** so quota (429) / registration (503/409) errors return proper JSON status, not a half-open stream. Stream-end `agent.test` audit written on a fresh session so streamed tests share the 100/day quota; cancelled/failed streams burn none. `dify_app_id` reset on update/rollback. 8 new tests.
+  - **Frontend:** `lib/sse.ts` (fetch+ReadableStream reader — EventSource can't send auth headers) + streaming **Test playground**; **tabbed agent detail** (Overview/Versions/Vetting/Tools/Test); agents list **URL-synced classification+vetting filters + sort**; **New-Agent 3-tab** page (Template/Upload/Build-in-Dify), `ROUTES.newAgent` → it. Chat-to-build **deferred to Phase 16**.
+  - **Infra (commit 917b57d):** stood up the never-initialized Dify — Ollama TLS (`GODEBUG=x509negativeserial=1`, model pulled), Dify console routing (exposed dify-api:5001 + CORS + API URLs), storage perms; Dify admin created. See `memory/project-dify-bringup.md`.
+  - **Verified live:** login → import template (Draft/Unvetted) → `test-stream` returns a clean fail-closed `503` (generator-priming + guard confirmed). 167 backend tests pass; tsc/biome clean.
+- Outstanding:
+  - **Live run blocked: Dify 1.14 plugin-daemon missing.** Model providers (Ollama) are plugins served by a `plugin-daemon` service that isn't in `docker-compose.yml`; the console 400s on `/model-providers`/`/plugin/tasks`. Next task: add the plugin-daemon (+ DB/keys/volumes + `PLUGIN_*` env), install the Ollama provider plugin, then verify the run.
+  - **Adapter `/v1` auth:** `invoke_sandbox`/`stream_sandbox` send the Dify app *id* as the `/v1/chat-messages` bearer; Dify likely wants a per-app service key (`app-…`) or the console chat endpoint — verify/fix when the runtime is up (never exercised).
+  - Tag `phase-14-complete` after the live run passes.
+- ADRs added: —
+
 ## Phase 16 — SILA (planned)
 
 - Status: **documented in CLAUDE.md §6, not started.** The conversational platform concierge (text-first → voice); builds Dify agents + n8n workflows; builder-scope only; capstone after Phase 9 + 15 + moving KB processing to a worker container.
