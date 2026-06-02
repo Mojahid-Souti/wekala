@@ -63,7 +63,7 @@ export default function AgentDetailPage({ params }: Props) {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-4 px-5 py-6">
+      <div className="mx-auto max-w-[1400px] space-y-4 px-5 py-6">
         <div className="h-8 w-1/3 animate-pulse rounded bg-neutral-100" />
         <div className="h-4 w-2/3 animate-pulse rounded bg-neutral-100" />
         <div className="h-40 animate-pulse rounded-xl bg-neutral-50" />
@@ -73,7 +73,7 @@ export default function AgentDetailPage({ params }: Props) {
 
   if (!agent) {
     return (
-      <div className="mx-auto max-w-5xl px-5 py-12 text-center">
+      <div className="mx-auto max-w-[1400px] px-5 py-12 text-center">
         <p className="text-sm text-neutral-500">Agent not found.</p>
         <Link
           href={ROUTES.agents(workspaceId)}
@@ -90,7 +90,7 @@ export default function AgentDetailPage({ params }: Props) {
     agent.vetting_status === "approved";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-5 py-6 lg:px-7">
+    <div className="mx-auto max-w-[1400px] space-y-6 px-5 py-6 lg:px-7">
       {/* Header */}
       <header className="space-y-3">
         <Link

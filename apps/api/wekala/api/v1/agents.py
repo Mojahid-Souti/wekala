@@ -551,12 +551,16 @@ async def test_agent_stream(
         return f"data: {json.dumps(item)}\n\n"
 
     async def _sse() -> AsyncIterator[str]:
+        done_sent = False
         try:
             if first is not None:
                 yield _frame(first)
+                done_sent = "usage" in first
             async for item in agen:
                 yield _frame(item)
-            yield 'data: {"done": true}\n\n'
+                done_sent = done_sent or ("usage" in item)
+            if not done_sent:  # only emit a terminal frame if message_end didn't
+                yield 'data: {"done": true}\n\n'
         except Exception:
             logger.exception("agent test-stream failed mid-stream")
             yield 'data: {"error": "stream_failed"}\n\n'

@@ -44,7 +44,9 @@ export function AgentTestPlayground({
             setStatus("error");
           },
           onDone: (u) => {
-            setUsage(u);
+            // The stream may send a usage `done` then a bare `done`; don't let
+            // the empty one clobber the real usage.
+            if (Object.keys(u).length > 0) setUsage(u);
             setStatus((s) => (s === "error" ? s : "idle"));
           },
         },

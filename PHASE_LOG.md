@@ -354,11 +354,11 @@ Format:
   - **MCP OAuth (Tier 2)** for SaaS servers (Sentry/Linear/Notion/GitHub/Atlassian) — documented in CLAUDE.md §6, a future mini-phase.
 - ADRs added: —
 
-## Phase 14 — Agent flow redesign + runnable agents (live run working)
+## Phase 14 — Agent flow redesign + runnable agents
 
 - Started: 2026-06-02
-- Completed: 2026-06-02 (agents run end-to-end via Dify+Ollama, verified through the Wekala API; browser playground pending Mojahid's manual pass before the tag)
-- Tag: — (tag `phase-14-complete` after the browser manual test)
+- Completed: 2026-06-02 — agents run end-to-end via Dify+Ollama, **confirmed in the browser Test playground** (streaming answer + token usage). Detail page widened to home width; stream emits a single usage `done` frame.
+- Tag: phase-14-complete
 - Notes:
   - **Backend feature (commit 8de0815):** `AgentService._ensure_registered` lazily registers an agent with Dify on first test (`register_app` existed but was never called → `dify_app_id` always NULL); the DSL comes from the current **AgentVersion** snapshot (the `Agent` row has no `dify_dsl`). `AgentRuntime.stream_sandbox` + DifyAdapter relay Dify's native SSE; new `POST .../agents/{id}/test-stream` SSE endpoint, **generator-primed** so quota (429)/registration (503/409) errors return proper JSON status, not a half-open stream. Stream-end `agent.test` audit on a fresh session → streamed tests share the 100/day quota; cancelled/failed streams burn none. `dify_app_id` reset on update/rollback. 8 new tests; 167 total pass.
   - **Frontend:** `lib/sse.ts` (fetch+ReadableStream reader — EventSource can't send auth headers) + streaming **Test playground**; **tabbed agent detail** (Overview/Versions/Vetting/Tools/Test); agents list **URL-synced classification+vetting filters + sort**; **New-Agent 3-tab** page (Template/Upload/Build-in-Dify), `ROUTES.newAgent` → it. Chat-to-build **deferred to Phase 16**.
