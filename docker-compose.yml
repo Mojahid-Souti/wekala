@@ -409,11 +409,15 @@ services:
       MODE: api
       LOG_LEVEL: INFO
       SECRET_KEY: ${DIFY_SECRET_KEY}
-      CONSOLE_WEB_URL: ""
+      CONSOLE_WEB_URL: "http://localhost:3000"
       INIT_PASSWORD: ""
-      CONSOLE_API_URL: ""
-      SERVICE_API_URL: ""
-      APP_WEB_URL: ""
+      CONSOLE_API_URL: "http://localhost:5001"
+      SERVICE_API_URL: "http://localhost:5001"
+      APP_WEB_URL: "http://localhost:3000"
+      # Browser hits dify-api directly (no nginx proxy in this stack), so allow
+      # the dify-web origin. POC-wide "*"; tighten to http://localhost:3000 later.
+      WEB_API_CORS_ALLOW_ORIGINS: "*"
+      CONSOLE_CORS_ALLOW_ORIGINS: "*"
       CHECK_UPDATE_URL: ""
       OPENAI_API_BASE: ""
       DB_USERNAME: dify
@@ -437,6 +441,10 @@ services:
       MIGRATION_ENABLED: "true"
     volumes:
       - dify-storage-data:/app/api/storage
+    ports:
+      # Exposed so the browser-side Dify console (port 3000) can reach the
+      # console API directly. The Wekala API still uses the internal host.
+      - "5001:5001"
     networks:
       - dify_net
       - wekala_net
@@ -459,6 +467,7 @@ services:
   dify-worker:
     <<: *dify-api
     container_name: wekala-dify-worker
+    ports: []  # don't inherit dify-api's host port mapping (would clash on 5001)
     environment:
       MODE: worker
       LOG_LEVEL: INFO
@@ -498,8 +507,8 @@ services:
     container_name: wekala-dify-web
     restart: unless-stopped
     environment:
-      CONSOLE_API_URL: ""
-      APP_API_URL: ""
+      CONSOLE_API_URL: "http://localhost:5001"
+      APP_API_URL: "http://localhost:5001"
       SENTRY_DSN: ""
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: "0.0.0.0"
@@ -534,6 +543,10 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0
       OLLAMA_KEEP_ALIVE: 5m
+      # Tolerate registry/proxy TLS certs with negative serial numbers (Go 1.23+
+      # rejects them by default; common behind enterprise MITM proxies). Lets
+      # `ollama pull` fetch manifests from registry.ollama.ai through such proxies.
+      GODEBUG: x509negativeserial=1
     volumes:
       - ollama-data:/root/.ollama
     ports:
