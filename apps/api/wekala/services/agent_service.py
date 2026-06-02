@@ -247,10 +247,10 @@ class AgentService:
             # Approved → unvetted forces a fresh submit-for-review before publish.
             if agent.vetting_status in ("approved", "ready_for_review", "rejected"):
                 fields["vetting_status"] = "unvetted"
-            # A DSL change invalidates the registered Dify app: store the new DSL
-            # and clear dify_app_id so the next sandbox test re-registers (Phase 14).
+            # A DSL change invalidates the registered Dify app — the new version
+            # snapshot holds the DSL, so just clear dify_app_id to force a
+            # re-register on the next sandbox test (Phase 14).
             if dify_dsl is not None:
-                fields["dify_dsl"] = dify_dsl
                 fields["dify_app_id"] = None
             agent = await self._agents.update(agent, **fields)
             await self._audit.record(
@@ -400,8 +400,8 @@ class AgentService:
                 version=new_version_num,
                 name=snap.name,
                 description=snap.description,
-                # Restore the snapshot's DSL and force a re-register on next test.
-                dify_dsl=snap.dify_dsl,
+                # The new version snapshot (created above) restores the DSL;
+                # clear dify_app_id to force a re-register on the next test.
                 dify_app_id=None,
             )
             await self._audit.record(
@@ -589,13 +589,17 @@ class AgentService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Agent runtime is not configured",
             )
-        if not agent.dify_dsl:
+        # The DSL lives on the current version snapshot (AgentVersion), not the
+        # Agent row.
+        version = await self._versions.get(agent.id, agent.version)
+        dsl = version.dify_dsl if version else None
+        if not dsl:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Agent has no definition to register",
             )
         try:
-            app_id = await self._runtime.register_app(agent.name, agent.dify_dsl)
+            app_id = await self._runtime.register_app(agent.name, dsl)
         except httpx.HTTPError as e:
             logger.warning("Dify register_app failed for agent %s: %s", agent.id, e)
             raise HTTPException(

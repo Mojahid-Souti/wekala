@@ -18,13 +18,16 @@ from wekala.services.agent_service import AgentService
 
 
 def _mock_adapter(body: str) -> DifyAdapter:
-    def handler(_request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
+        # GET /apps/{id} → model_config; POST chat-messages → the SSE body.
+        if request.method == "GET":
+            return httpx.Response(200, json={"model_config": {"model": {"name": "m"}}})
         return httpx.Response(
             200, content=body.encode(), headers={"content-type": "text/event-stream"}
         )
 
     adapter = DifyAdapter()
-    adapter._client = lambda: httpx.AsyncClient(  # type: ignore[method-assign]
+    adapter._client = lambda *_a, **_k: httpx.AsyncClient(  # type: ignore[method-assign]
         transport=httpx.MockTransport(handler), timeout=httpx.Timeout(5.0)
     )
     return adapter
@@ -65,11 +68,18 @@ def _agent(**overrides: object) -> SimpleNamespace:
         "id": uuid.uuid4(),
         "workspace_id": uuid.uuid4(),
         "name": "Agent A",
-        "dify_dsl": {"app": {"name": "Agent A", "mode": "chat"}},
+        "version": 1,
         "dify_app_id": None,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
+
+
+def _mock_version(svc: AgentService, dsl: dict | None) -> None:
+    """Stub the version repo so _ensure_registered finds (or doesn't find) a DSL.
+    The DSL lives on the current AgentVersion snapshot, not the Agent row."""
+    version = SimpleNamespace(dify_dsl=dsl) if dsl is not None else None
+    svc._versions.get = AsyncMock(return_value=version)  # type: ignore[method-assign]
 
 
 async def test_ensure_registered_returns_existing_without_calling_runtime() -> None:
@@ -88,14 +98,17 @@ async def test_ensure_registered_503_when_unconfigured(monkeypatch: pytest.Monke
 
 async def test_ensure_registered_409_when_no_dsl(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "dify_console_token", "tok")
+    svc = _svc()
+    _mock_version(svc, None)  # no version snapshot → nothing to register
     with pytest.raises(HTTPException) as exc:
-        await _svc()._ensure_registered(_agent(dify_dsl={}))
+        await svc._ensure_registered(_agent())
     assert exc.value.status_code == 409
 
 
 async def test_ensure_registered_registers_and_persists(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "dify_console_token", "tok")
     svc = _svc()
+    _mock_version(svc, {"app": {"name": "Agent A", "mode": "chat"}})
     svc._runtime.register_app = AsyncMock(return_value="new-app-id")
     nested = MagicMock()
     nested.__aenter__ = AsyncMock(return_value=None)
@@ -113,6 +126,7 @@ async def test_ensure_registered_registers_and_persists(monkeypatch: pytest.Monk
 async def test_ensure_registered_503_on_dify_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "dify_console_token", "tok")
     svc = _svc()
+    _mock_version(svc, {"app": {"name": "Agent A", "mode": "chat"}})
     svc._runtime.register_app = AsyncMock(side_effect=httpx.ConnectError("down"))
     with pytest.raises(HTTPException) as exc:
         await svc._ensure_registered(_agent())

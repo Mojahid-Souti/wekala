@@ -408,6 +408,18 @@ services:
     environment:
       MODE: api
       LOG_LEVEL: INFO
+      # Phase 14 — plugin daemon (Dify 1.x model providers are plugins)
+      PLUGIN_DAEMON_URL: http://plugin-daemon:5002
+      PLUGIN_DAEMON_KEY: ${DIFY_PLUGIN_DAEMON_KEY}
+      INNER_API_KEY_FOR_PLUGIN: ${DIFY_PLUGIN_INNER_API_KEY}
+      PLUGIN_REMOTE_INSTALL_HOST: plugin-daemon
+      PLUGIN_REMOTE_INSTALL_PORT: 5003
+      MARKETPLACE_ENABLED: "true"
+      MARKETPLACE_API_URL: https://marketplace.dify.ai
+      # Server-to-server console access: bypasses CSRF + authenticates as the
+      # workspace owner via the X-WORKSPACE-ID header (Wekala DifyAdapter uses this).
+      ADMIN_API_KEY_ENABLE: "true"
+      ADMIN_API_KEY: ${DIFY_ADMIN_API_KEY}
       SECRET_KEY: ${DIFY_SECRET_KEY}
       CONSOLE_WEB_URL: "http://localhost:3000"
       INIT_PASSWORD: ""
@@ -509,6 +521,8 @@ services:
     environment:
       CONSOLE_API_URL: "http://localhost:5001"
       APP_API_URL: "http://localhost:5001"
+      MARKETPLACE_API_URL: "https://marketplace.dify.ai"
+      MARKETPLACE_URL: "https://marketplace.dify.ai"
       SENTRY_DSN: ""
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: "0.0.0.0"
@@ -526,6 +540,57 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ===========================================================================
+  # DIFY PLUGIN DAEMON — In Dify 1.x, model providers (Ollama, etc.) are plugins
+  # served by this daemon. Required for the model-provider console + agent runs.
+  # ===========================================================================
+
+  plugin-daemon:
+    image: langgenius/dify-plugin-daemon:0.6.0-local
+    container_name: wekala-dify-plugin-daemon
+    restart: unless-stopped
+    environment:
+      DB_USERNAME: dify
+      DB_PASSWORD: ${DIFY_DB_PASSWORD}
+      DB_HOST: dify-db
+      DB_PORT: 5432
+      DB_DATABASE: dify_plugin
+      DB_SSL_MODE: disable
+      REDIS_HOST: dify-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${DIFY_REDIS_PASSWORD}
+      SERVER_PORT: 5002
+      SERVER_KEY: ${DIFY_PLUGIN_DAEMON_KEY}
+      DIFY_INNER_API_URL: http://dify-api:5001
+      DIFY_INNER_API_KEY: ${DIFY_PLUGIN_INNER_API_KEY}
+      PLUGIN_REMOTE_INSTALLING_HOST: 0.0.0.0
+      PLUGIN_REMOTE_INSTALLING_PORT: 5003
+      PLUGIN_WORKING_PATH: /app/storage/cwd
+      FORCE_VERIFYING_SIGNATURE: "false"
+      PLUGIN_STORAGE_TYPE: local
+      PLUGIN_STORAGE_LOCAL_ROOT: /app/storage
+      PLUGIN_INSTALLED_PATH: plugin
+      PLUGIN_PACKAGE_CACHE_PATH: plugin_packages
+      PLUGIN_MEDIA_CACHE_PATH: assets
+      MARKETPLACE_ENABLED: "true"
+      MARKETPLACE_API_URL: https://marketplace.dify.ai
+      # Same proxy negative-serial TLS workaround as ollama (marketplace = Go HTTPS).
+      GODEBUG: x509negativeserial=1
+    volumes:
+      - dify-plugin-data:/app/storage
+    networks:
+      - dify_net
+      - wekala_net
+    depends_on:
+      dify-db:
+        condition: service_healthy
+      dify-redis:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -882,6 +947,10 @@ services:
       WEKALA_SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       OPA_URL: http://opa:8181
+      # Phase 14 — Dify agent runtime (server-to-server via ADMIN_API_KEY)
+      DIFY_BASE_URL: http://dify-api:5001
+      DIFY_CONSOLE_TOKEN: ${DIFY_ADMIN_API_KEY}
+      DIFY_WORKSPACE_ID: ${DIFY_WORKSPACE_ID}
       # Phase 4 — Knowledge Base & RAG
       CLAMAV_HOST: wekala-clamav
       CLAMAV_PORT: "3310"
@@ -1044,6 +1113,8 @@ volumes:
   dify-redis-data:
     driver: local
   dify-storage-data:
+    driver: local
+  dify-plugin-data:
     driver: local
   ollama-data:
     driver: local

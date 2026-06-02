@@ -23,7 +23,12 @@ class Settings(BaseSettings):
 
     # Dify agent runtime
     dify_base_url: str = "http://dify-api:5001"
-    dify_console_token: str = ""  # required in production; empty disables Dify calls
+    # Dify ADMIN_API_KEY — server-to-server console access (bypasses CSRF).
+    # Empty disables Dify calls (fail-closed 503).
+    dify_console_token: str = ""
+    # Dify workspace (tenant) id — sent as X-WORKSPACE-ID so the admin key
+    # authenticates as that workspace's owner.
+    dify_workspace_id: str = ""
 
     # Agent sandbox quota (invocations per user per day)
     agent_sandbox_daily_quota: int = 100
