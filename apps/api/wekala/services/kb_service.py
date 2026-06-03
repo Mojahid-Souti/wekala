@@ -286,6 +286,10 @@ class KnowledgeBaseService:
         file_type = doc.file_type
 
         await self._docs.set_status(doc_id, "processing")
+        # Idempotent re-run: clear chunks from any previous (failed/reclaimed)
+        # attempt so a retry never collides on the (document_id, chunk_index)
+        # unique constraint. Makes the whole pipeline safe to re-execute.
+        await self._chunks.delete_by_document(doc_id)
         await self._db.commit()
 
         # 1. Parse (offloaded to a thread inside the adapter)
@@ -447,8 +451,12 @@ def _get_pii_engine() -> Any:
             from presidio_analyzer import AnalyzerEngine
 
             _pii_engine = AnalyzerEngine()
-        except ImportError:
-            _pii_engine = None  # presidio optional until Phase 6
+        except Exception as exc:  # noqa: BLE001 — PII flag is best-effort in Phase 4
+            # Never let a missing/broken spaCy model block document processing.
+            # (Phase 6 enforces; here PII detection is log-only.) The model is
+            # baked into the image, so this should not normally fire.
+            logger.warning("PII engine unavailable — skipping PII flag: %s", exc)
+            _pii_engine = None
     return _pii_engine
 
 

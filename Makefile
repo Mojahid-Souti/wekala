@@ -111,14 +111,20 @@ clean: ## Stop stack and DELETE all volumes (DESTRUCTIVE — ask first)
 ##@ Models
 
 .PHONY: pull-models
-pull-models: ## Pull default Ollama models (LLM + embeddings + reranker)
+pull-models: ## Pull the required Ollama models (LLM + embeddings)
 	@echo "  Pulling LLM: $${OLLAMA_DEFAULT_LLM:-qwen2.5:7b-instruct}"
 	docker exec wekala-ollama ollama pull $${OLLAMA_DEFAULT_LLM:-qwen2.5:7b-instruct}
 	@echo "  Pulling embeddings: $${OLLAMA_EMBEDDING_MODEL:-bge-m3}"
 	docker exec wekala-ollama ollama pull $${OLLAMA_EMBEDDING_MODEL:-bge-m3}
-	@echo "  Pulling reranker: $${OLLAMA_RERANKER_MODEL:-bge-reranker-v2-m3}"
-	docker exec wekala-ollama ollama pull $${OLLAMA_RERANKER_MODEL:-bge-reranker-v2-m3}
-	@echo "  $(GREEN)✓$(RESET) Models ready"
+	@echo "  $(GREEN)✓$(RESET) Required models ready (LLM + embeddings)"
+	@echo "  Reranker is a Phase-4+ enhancement and not an Ollama-native model;"
+	@echo "  run 'make pull-reranker' if/when reranking is wired into RAG."
+
+.PHONY: pull-reranker
+pull-reranker: ## (Optional, Phase 4+) Attempt to pull the reranker model — not used yet
+	@echo "  Pulling reranker: $${OLLAMA_RERANKER_MODEL:-bge-reranker-v2-m3} (optional)"
+	@docker exec wekala-ollama ollama pull $${OLLAMA_RERANKER_MODEL:-bge-reranker-v2-m3} \
+		|| echo "  Reranker not available via Ollama (no manifest) — skipping; not wired into RAG yet."
 
 ##@ Health
 
