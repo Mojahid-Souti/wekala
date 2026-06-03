@@ -103,7 +103,7 @@ class DifyAdapter:
         in the request body (it mirrors the web debug panel)."""
         r = await client.get(f"{self._base}/apps/{app_id}")
         r.raise_for_status()
-        mc = r.json().get("model_config")
+        mc: dict[str, Any] | None = r.json().get("model_config")
         if not mc:
             raise RuntimeError("Dify app has no model_config")
         return mc

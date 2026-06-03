@@ -5,13 +5,14 @@ packages:
 overrides:
   postcss: ">=8.5.10"
 
-# Build scripts approved for these packages (required for binaries)
+# Per-dependency build-script approval (pnpm's canonical location — the `pnpm`
+# field in package.json is no longer read by pnpm v11). The native-binary
+# packages are approved; msw is denied (its browser service-worker build isn't
+# needed — there are no MSW-based tests).
 allowBuilds:
   "@biomejs/biome": true
   "@parcel/watcher": true
   "@swc/core": true
   esbuild: true
-  msw: set this to true or false
   sharp: true
-
-strictDepBuilds: false
+  msw: false

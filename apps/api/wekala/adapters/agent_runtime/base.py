@@ -26,9 +26,7 @@ class AgentRuntime(Protocol):
         """Run a non-streaming sandbox invocation. Returns {"answer": str, "usage": {...}}."""
         ...
 
-    def stream_sandbox(  # type: ignore[type-arg]
-        self, app_id: str, query: str, user_id: str
-    ) -> AsyncIterator[dict]:
+    def stream_sandbox(self, app_id: str, query: str, user_id: str) -> AsyncIterator[dict]:  # type: ignore[type-arg]
         """Streaming sandbox invocation. Async-yields ``{"token": str}`` chunks as
         they arrive, then a final ``{"usage": {...}}``. (Declared non-async because
         the implementation is an async generator — calling it returns the iterator.)
