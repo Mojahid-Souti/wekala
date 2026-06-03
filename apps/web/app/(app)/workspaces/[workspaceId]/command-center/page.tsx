@@ -1,16 +1,44 @@
 "use client";
 
+import { ActivityChart, ChartLegend } from "@/components/analytics/activity-chart";
+import { InvocationsPie } from "@/components/analytics/activity-pie";
 import { api } from "@/lib/api";
 import { ROUTES } from "@/lib/constants";
 import { useToast } from "@/lib/toast";
 import { useToken } from "@/lib/use-token";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Activity,
+  BarChart3,
+  Bot,
+  ChevronDown,
+  Clock,
+  Coins,
+  Download,
+  Gauge,
+  PieChart,
+  ScrollText,
+  TrendingUp,
+  TriangleAlert,
+  Wrench,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 const RANGE_OPTIONS = [7, 14, 30, 90] as const;
 type RangeDays = (typeof RANGE_OPTIONS)[number];
+
+// Monochrome theme: every tone resolves to the same neutral chip. The `tone`
+// prop is kept as a theming seam so accent colors can be reintroduced in one place.
+type Tone = "blue" | "orange" | "neutral";
+const TONE_CHIP: Record<Tone, string> = {
+  blue: "bg-neutral-100 text-neutral-700",
+  orange: "bg-neutral-100 text-neutral-700",
+  neutral: "bg-neutral-100 text-neutral-700",
+};
 
 export default function CommandCenterPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -18,6 +46,7 @@ export default function CommandCenterPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [range, setRange] = useState<RangeDays>(7);
+  const [showAudit, setShowAudit] = useState(false);
 
   const { data: kpis } = useQuery({
     queryKey: ["analytics-kpis", workspaceId, range],
@@ -73,26 +102,27 @@ export default function CommandCenterPage() {
     enabled: !!token,
   });
 
-  const maxInvocations = Math.max(1, ...(series?.map((s) => s.invocations) ?? []));
-
   return (
-    <div className="space-y-8 max-w-6xl">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-5 py-6 lg:px-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Command Center</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Workspace activity, top agents, anomalies, and audit history.
+          <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">Command Center</h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            Workspace activity, cost, top agents, anomalies, and audit history.
           </p>
         </div>
-        <div className="flex gap-1 rounded-lg border border-gray-300 bg-white p-1">
+        <div className="flex gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
           {RANGE_OPTIONS.map((d) => (
             <button
               key={d}
               type="button"
               onClick={() => setRange(d)}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                range === d ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
-              }`}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                range === d
+                  ? "bg-neutral-950 text-white shadow-sm"
+                  : "text-neutral-600 hover:bg-neutral-100"
+              )}
             >
               {d}d
             </button>
@@ -102,32 +132,55 @@ export default function CommandCenterPage() {
 
       {/* KPI strip */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Invocations" value={kpis?.invocations ?? 0} subtitle={`last ${range}d`} />
         <KpiCard
+          icon={Activity}
+          tone="blue"
+          label="Invocations"
+          value={kpis?.invocations ?? 0}
+          subtitle={`last ${range}d`}
+        />
+        <KpiCard
+          icon={Clock}
+          tone="orange"
           label="Hours saved"
           value={kpis ? kpis.hours_saved.toFixed(1) : "0.0"}
           subtitle="estimated"
         />
         <KpiCard
+          icon={Bot}
+          tone="blue"
           label="Active agents"
           value={kpis?.active_agents ?? 0}
           subtitle={`last ${range}d`}
         />
-        <KpiCard label="p95 latency" value={`${kpis?.p95_latency_ms ?? 0}`} unit="ms" />
-        <KpiCard label="Tool calls" value={kpis?.tool_calls ?? 0} subtitle={`last ${range}d`} />
+        <KpiCard
+          icon={Gauge}
+          tone="neutral"
+          label="p95 latency"
+          value={`${kpis?.p95_latency_ms ?? 0}`}
+          unit="ms"
+        />
+        <KpiCard
+          icon={Wrench}
+          tone="orange"
+          label="Tool calls"
+          value={kpis?.tool_calls ?? 0}
+          subtitle={`last ${range}d`}
+        />
       </section>
 
-      {/* Compute cost & ROI — local inference */}
-      <section className="rounded-lg border bg-white p-5">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Compute cost &amp; ROI</h2>
-          <span className="text-xs text-gray-400">local inference · last {range}d</span>
-        </div>
-        <p className="mt-1 text-xs text-gray-500">
+      {/* Compute cost & ROI */}
+      <Panel
+        icon={Coins}
+        tone="orange"
+        title="Compute cost & ROI"
+        action={<span className="text-xs text-neutral-400">local inference · last {range}d</span>}
+      >
+        <p className="-mt-1 mb-4 max-w-2xl text-xs text-neutral-500">
           Local models charge no per-token fee — the real cost is amortized hardware + electricity.
           Cost per token falls as the GPU is used more.
         </p>
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <CostStat
             label="Tokens processed"
             value={cost ? cost.total_tokens.toLocaleString() : "—"}
@@ -150,9 +203,9 @@ export default function CommandCenterPage() {
           />
         </div>
         {cost && cost.total_tokens > 0 && (
-          <p className="mt-4 rounded-md border border-gray-100 bg-gray-50 p-3 text-xs leading-relaxed text-gray-600">
+          <p className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs leading-relaxed text-neutral-600">
             Effective cost ≈{" "}
-            <span className="font-semibold text-gray-900">
+            <span className="font-semibold text-neutral-900">
               ${cost.effective_usd_per_1m.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               /1M
             </span>{" "}
@@ -163,170 +216,261 @@ export default function CommandCenterPage() {
               : `${cost.cloud_reference_name} would bill only $${cost.cloud_equivalent_usd.toFixed(4)} for this volume — local wins at scale and keeps data on-prem (PDPL).`}
           </p>
         )}
-      </section>
+      </Panel>
 
-      {/* Timeseries (custom inline bar chart, no Recharts dep yet) */}
-      <section className="rounded-lg border bg-white p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">Daily invocations</h2>
-        {series && series.length > 0 ? (
-          <div className="flex h-32 items-end gap-1">
-            {series.map((p) => {
-              const height = (p.invocations / maxInvocations) * 100;
-              return (
+      {/* Daily activity (bar) + invocations by agent (pie) */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Panel
+          icon={BarChart3}
+          title="Daily activity"
+          action={<ChartLegend />}
+          className="lg:col-span-2"
+        >
+          <ActivityChart data={series ?? []} />
+        </Panel>
+        <Panel icon={PieChart} title="Invocations by agent">
+          <InvocationsPie agents={topAgents ?? []} />
+        </Panel>
+      </div>
+
+      {/* Top agents (wide) + anomalies (narrow) */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Panel
+          icon={TrendingUp}
+          tone="blue"
+          title={`Top agents · last ${range}d`}
+          className="lg:col-span-2"
+        >
+          {topAgents && topAgents.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase tracking-wider text-neutral-500">
+                  <tr>
+                    <th className="py-2 text-left font-medium">Agent</th>
+                    <th className="py-2 text-right font-medium">Invocations</th>
+                    <th className="py-2 text-right font-medium">Success</th>
+                    <th className="py-2 text-right font-medium">p95</th>
+                    <th className="py-2 text-right font-medium">Hours</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {topAgents.map((a) => (
+                    <tr key={a.agent_id} className="transition-colors hover:bg-neutral-50">
+                      <td className="py-2.5">
+                        <Link
+                          href={ROUTES.agentDetail(workspaceId, a.agent_id)}
+                          className="font-medium text-neutral-900 hover:underline"
+                        >
+                          {a.name}
+                        </Link>
+                      </td>
+                      <td className="py-2.5 text-right font-mono text-xs tabular-nums text-neutral-600">
+                        {a.invocations}
+                      </td>
+                      <td className="py-2.5 text-right font-mono text-xs tabular-nums text-neutral-600">
+                        {(a.success_rate * 100).toFixed(1)}%
+                      </td>
+                      <td className="py-2.5 text-right font-mono text-xs tabular-nums text-neutral-600">
+                        {a.p95_latency_ms}ms
+                      </td>
+                      <td className="py-2.5 text-right font-mono text-xs tabular-nums text-neutral-600">
+                        {a.hours_saved.toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyHint>
+              No agent invocations yet. Once agents are invoked via the API, they&apos;ll appear
+              here.
+            </EmptyHint>
+          )}
+        </Panel>
+
+        <Panel icon={TriangleAlert} tone="orange" title="Anomalies">
+          {openAnomalies && openAnomalies.length > 0 ? (
+            <div className="space-y-2">
+              {openAnomalies.map((a) => (
+                <div key={a.id} className="rounded-xl border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm font-medium text-red-900">{a.metric_name}</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-red-700">
+                    {a.threshold_kind} &gt; {a.threshold_value} · observed {a.observed_value}
+                  </p>
+                  {a.note && <p className="mt-1 text-xs text-red-800">{a.note}</p>}
+                  <button
+                    type="button"
+                    onClick={() => ackMutation.mutate(a.id)}
+                    disabled={ackMutation.isPending}
+                    className="mt-2 rounded-lg border border-red-300 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50"
+                  >
+                    Acknowledge
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : anomalyEvals && anomalyEvals.length > 0 ? (
+            <div className="space-y-1">
+              {anomalyEvals.map((e) => (
                 <div
-                  key={p.day}
-                  className="flex-1 min-w-0 flex flex-col items-center gap-1"
-                  title={`${p.day} — ${p.invocations} invocations`}
+                  key={e.rule_id}
+                  className="flex items-center justify-between gap-2 border-b border-neutral-100 py-2 text-sm last:border-0"
                 >
-                  <div
-                    className="w-full rounded-sm bg-indigo-500 transition-all"
-                    style={{ height: `${Math.max(height, 2)}%` }}
-                  />
-                  <span className="text-[10px] font-mono text-gray-400 truncate w-full text-center">
-                    {p.day.slice(5)}
+                  <span className="truncate font-mono text-xs text-neutral-700">{e.metric}</span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                      e.fired ? "bg-red-50 text-red-600" : "bg-neutral-100 text-neutral-500"
+                    )}
+                  >
+                    {e.fired ? "ALERT" : "ok"}
                   </span>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 py-8 text-center">
-            No invocations yet in this range.
-          </p>
-        )}
-      </section>
-
-      {/* Anomalies */}
-      <section className="rounded-lg border bg-white p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">Anomalies</h2>
-        {openAnomalies && openAnomalies.length > 0 ? (
-          <div className="space-y-2">
-            {openAnomalies.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-start justify-between rounded-md border border-red-200 bg-red-50 p-3 gap-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-red-900">
-                    {a.metric_name}{" "}
-                    <span className="text-xs font-mono text-red-700">
-                      ({a.threshold_kind} &gt; {a.threshold_value} — observed {a.observed_value})
-                    </span>
-                  </p>
-                  {a.note && <p className="mt-0.5 text-xs text-red-800">{a.note}</p>}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => ackMutation.mutate(a.id)}
-                  disabled={ackMutation.isPending}
-                  className="shrink-0 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
-                >
-                  Acknowledge
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : anomalyEvals && anomalyEvals.length > 0 ? (
-          <div className="space-y-1">
-            {anomalyEvals.map((e) => (
-              <div
-                key={e.rule_id}
-                className="flex items-center justify-between text-sm border-b last:border-0 border-gray-100 py-1.5"
-              >
-                <span className="text-gray-700 font-mono text-xs">{e.metric}</span>
-                <span className="text-xs text-gray-500">
-                  observed {e.observed_value} {e.z_score !== null && `(z=${e.z_score.toFixed(2)})`}
-                </span>
-                <span
-                  className={`text-xs font-medium ${e.fired ? "text-red-700" : "text-green-700"}`}
-                >
-                  {e.fired ? "ALERT" : "ok"}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400">No anomaly rules configured.</p>
-        )}
-      </section>
-
-      {/* Top agents */}
-      <section className="rounded-lg border bg-white p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">Top agents (last {range}d)</h2>
-        {topAgents && topAgents.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead className="text-xs uppercase text-gray-500 tracking-wide">
-              <tr>
-                <th className="text-left py-2">Agent</th>
-                <th className="text-right py-2">Invocations</th>
-                <th className="text-right py-2">Success</th>
-                <th className="text-right py-2">p95</th>
-                <th className="text-right py-2">Hours saved</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {topAgents.map((a) => (
-                <tr key={a.agent_id}>
-                  <td className="py-2">
-                    <Link
-                      href={ROUTES.agentDetail(workspaceId, a.agent_id)}
-                      className="text-indigo-600 hover:underline"
-                    >
-                      {a.name}
-                    </Link>
-                  </td>
-                  <td className="text-right py-2 font-mono text-xs">{a.invocations}</td>
-                  <td className="text-right py-2 font-mono text-xs">
-                    {(a.success_rate * 100).toFixed(1)}%
-                  </td>
-                  <td className="text-right py-2 font-mono text-xs">{a.p95_latency_ms}ms</td>
-                  <td className="text-right py-2 font-mono text-xs">{a.hours_saved.toFixed(1)}</td>
-                </tr>
               ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-sm text-gray-400">
-            No agent invocations yet. Once you start invoking agents via the public API,
-            they&apos;ll appear here.
-          </p>
-        )}
-      </section>
+            </div>
+          ) : (
+            <EmptyHint>No anomaly rules configured.</EmptyHint>
+          )}
+        </Panel>
+      </div>
 
-      {/* Audit log preview */}
-      <section className="rounded-lg border bg-white p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-gray-900">
-            Recent audit log ({audit?.total ?? 0} total)
-          </h2>
-          <a
-            href={`/v1/workspaces/${workspaceId}/exports/audit-log.csv`}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="text-xs text-indigo-600 hover:underline"
-          >
-            Export CSV ↓
-          </a>
-        </div>
-        {audit && audit.items.length > 0 ? (
-          <div className="rounded-md border bg-gray-50 divide-y text-xs max-h-96 overflow-auto">
-            {audit.items.map((row) => (
-              <div
-                key={row.id}
-                className="grid grid-cols-[auto_1fr_auto] gap-3 px-3 py-2 font-mono"
-              >
-                <span className="text-gray-500">{row.timestamp.slice(0, 19)}</span>
-                <span className="text-gray-900 truncate">{row.action}</span>
-                <span className={row.outcome === "success" ? "text-green-700" : "text-red-700"}>
-                  {row.outcome}
-                </span>
-              </div>
-            ))}
+      {/* Audit log — hidden behind a toggle */}
+      <section className="rounded-2xl border border-neutral-200/80 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setShowAudit((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="inline-flex size-7 items-center justify-center rounded-lg bg-neutral-100 text-neutral-600">
+              <ScrollText className="size-4" />
+            </span>
+            <h2 className="text-sm font-semibold text-neutral-900">Recent audit log</h2>
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-neutral-500">
+              {audit?.total ?? 0}
+            </span>
           </div>
-        ) : (
-          <p className="text-sm text-gray-400">No audit events yet.</p>
+          <div className="flex items-center gap-3 text-xs text-neutral-400">
+            <span className="hidden sm:inline">{showAudit ? "Hide" : "Show"}</span>
+            <ChevronDown className={cn("size-4 transition-transform", showAudit && "rotate-180")} />
+          </div>
+        </button>
+        {showAudit && (
+          <div className="border-t border-neutral-100 px-5 pb-5 pt-4">
+            <div className="mb-3 flex justify-end">
+              <a
+                href={`/v1/workspaces/${workspaceId}/exports/audit-log.csv`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-600 hover:text-neutral-900"
+              >
+                <Download className="size-3.5" />
+                Export CSV
+              </a>
+            </div>
+            {audit && audit.items.length > 0 ? (
+              <div className="max-h-96 divide-y divide-neutral-100 overflow-auto rounded-xl border border-neutral-200 bg-neutral-50 text-xs">
+                {audit.items.map((row) => (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[auto_1fr_auto] gap-3 px-3 py-2 font-mono"
+                  >
+                    <span className="tabular-nums text-neutral-400">
+                      {row.timestamp.slice(0, 19)}
+                    </span>
+                    <span className="truncate text-neutral-900">{row.action}</span>
+                    <span
+                      className={row.outcome === "success" ? "text-neutral-500" : "text-red-600"}
+                    >
+                      {row.outcome}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyHint>No audit events yet.</EmptyHint>
+            )}
+          </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function Panel({
+  icon: Icon,
+  tone = "neutral",
+  title,
+  action,
+  className,
+  children,
+}: {
+  icon?: LucideIcon;
+  tone?: Tone;
+  title: string;
+  action?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={cn("rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-sm", className)}
+    >
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {Icon && (
+            <span
+              className={cn(
+                "inline-flex size-7 items-center justify-center rounded-lg",
+                TONE_CHIP[tone]
+              )}
+            >
+              <Icon className="size-4" />
+            </span>
+          )}
+          <h2 className="text-sm font-semibold text-neutral-900">{title}</h2>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function KpiCard({
+  icon: Icon,
+  tone,
+  label,
+  value,
+  unit,
+  subtitle,
+}: {
+  icon: LucideIcon;
+  tone: Tone;
+  label: string;
+  value: string | number;
+  unit?: string;
+  subtitle?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">{label}</p>
+        <span
+          className={cn(
+            "inline-flex size-7 items-center justify-center rounded-lg",
+            TONE_CHIP[tone]
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
+        {value}
+        {unit && <span className="ml-1 text-base font-medium text-neutral-500">{unit}</span>}
+      </p>
+      {subtitle && <p className="mt-0.5 text-xs text-neutral-400">{subtitle}</p>}
     </div>
   );
 }
@@ -334,32 +478,13 @@ export default function CommandCenterPage() {
 function CostStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-0.5 text-lg font-semibold text-gray-900">{value}</p>
-      {sub && <p className="text-[11px] text-gray-400">{sub}</p>}
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold tracking-tight text-neutral-900">{value}</p>
+      {sub && <p className="text-[11px] text-neutral-400">{sub}</p>}
     </div>
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  unit,
-  subtitle,
-}: {
-  label: string;
-  value: string | number;
-  unit?: string;
-  subtitle?: string;
-}) {
-  return (
-    <div className="rounded-lg border bg-white p-4">
-      <p className="text-xs uppercase tracking-wide font-medium text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-gray-900">
-        {value}
-        {unit && <span className="ml-1 text-base font-medium text-gray-500">{unit}</span>}
-      </p>
-      {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
-    </div>
-  );
+function EmptyHint({ children }: { children: ReactNode }) {
+  return <p className="py-6 text-center text-sm text-neutral-400">{children}</p>;
 }
