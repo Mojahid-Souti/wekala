@@ -1000,6 +1000,50 @@ services:
           memory: 512m
 
   # ===========================================================================
+  # WEKALA WORKER — drains the kb_jobs queue (parse → embed → store) off the API
+  # event loop. Same image as wekala-api, different command. Scale with replicas:
+  # FOR UPDATE SKIP LOCKED keeps claims race-free. One replica in the POC.
+  # ===========================================================================
+
+  wekala-worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: wekala-worker
+    restart: unless-stopped
+    command: ["python", "-m", "wekala.worker"]
+    environment:
+      WEKALA_ENV: development
+      WEKALA_SECRET_KEY: ${WEKALA_SECRET_KEY}
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      WEKALA_SUPABASE_URL: http://supabase-kong:8000
+      WEKALA_SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      OPA_URL: http://opa:8181
+      # KB processing pipeline
+      OLLAMA_URL: http://ollama:11434
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      EMBEDDING_BATCH_SIZE: "32"
+      DOCUMENT_MAX_MB: "50"
+      DOCUMENT_CHUNK_TOKENS: "1024"
+      DOCUMENT_CHUNK_OVERLAP: "128"
+      SUPABASE_STORAGE_URL: http://supabase-storage:5000
+      WEKALA_CLASSIFICATION_POLICY_PATH: /policies/classification.yaml
+      WEKALA_FIELD_ENCRYPTION_KEY: ${WEKALA_FIELD_ENCRYPTION_KEY}
+    volumes:
+      - ./infra/policies:/policies:ro
+    networks:
+      - wekala_net
+      - supabase_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  # ===========================================================================
   # WEKALA WEB — Next.js 15 frontend (Phase 1: login, signup, dashboard)
   # UI on port 3002.
   # ===========================================================================

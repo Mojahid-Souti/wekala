@@ -8,12 +8,13 @@ Query complexity:
 """
 
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from wekala.db.models import KBChunk, KBDocument, KnowledgeBase
+from wekala.db.models import KBChunk, KBDocument, KBJob, KnowledgeBase
 
 
 class KBRepository:
@@ -230,3 +231,119 @@ class ChunkRepository:
 
     async def delete_by_document(self, document_id: uuid.UUID) -> None:
         await self._db.execute(delete(KBChunk).where(KBChunk.document_id == document_id))
+
+
+@dataclass(frozen=True)
+class ClaimedJob:
+    """A kb_jobs row claimed by the worker (subset needed to process it)."""
+
+    id: uuid.UUID
+    document_id: uuid.UUID
+    kb_id: uuid.UUID
+    workspace_id: uuid.UUID
+    attempts: int
+
+
+# How many times a job may run before it is parked as 'failed'.
+MAX_JOB_ATTEMPTS = 3
+# Postgres NOTIFY channel the API signals on enqueue and the worker LISTENs on.
+KB_JOBS_CHANNEL = "kb_jobs"
+
+
+class KBJobRepository:
+    """Durable document-processing queue (kb_jobs).
+
+    Claiming uses ``FOR UPDATE SKIP LOCKED`` so multiple workers never grab the
+    same row — O(log n) via ix_kb_jobs_claim. The API enqueues + ``pg_notify``s
+    in the upload transaction; the worker LISTENs and drains.
+    """
+
+    def __init__(self, db: AsyncSession) -> None:
+        self._db = db
+
+    async def enqueue(
+        self, *, document_id: uuid.UUID, kb_id: uuid.UUID, workspace_id: uuid.UUID
+    ) -> uuid.UUID:
+        """Insert a queued job and signal the worker (both in the caller's txn)."""
+        job = KBJob(
+            document_id=document_id,
+            kb_id=kb_id,
+            workspace_id=workspace_id,
+            status="queued",
+        )
+        self._db.add(job)
+        await self._db.flush()
+        # Delivered to LISTENers on commit of the enclosing transaction.
+        await self._db.execute(text(f"NOTIFY {KB_JOBS_CHANNEL}"))
+        return job.id
+
+    async def claim_next(self) -> ClaimedJob | None:
+        """Atomically claim the oldest queued job, marking it 'processing'.
+
+        Caller must commit. Returns None when the queue is empty.
+        """
+        row = (
+            await self._db.execute(
+                text(
+                    """
+                    UPDATE kb_jobs
+                    SET status = 'processing',
+                        locked_at = now(),
+                        attempts = attempts + 1,
+                        updated_at = now()
+                    WHERE id = (
+                        SELECT id FROM kb_jobs
+                        WHERE status = 'queued'
+                        ORDER BY created_at
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT 1
+                    )
+                    RETURNING id, document_id, kb_id, workspace_id, attempts
+                    """
+                )
+            )
+        ).first()
+        if row is None:
+            return None
+        return ClaimedJob(
+            id=row.id,
+            document_id=row.document_id,
+            kb_id=row.kb_id,
+            workspace_id=row.workspace_id,
+            attempts=row.attempts,
+        )
+
+    async def reclaim_stale(self, *, older_than_seconds: int) -> int:
+        """Requeue jobs stuck in 'processing' past the threshold (worker crashed
+        mid-run). Returns how many were reclaimed. Caller commits."""
+        result = await self._db.execute(
+            text(
+                "UPDATE kb_jobs SET status='queued', locked_at=NULL, updated_at=now() "
+                "WHERE status='processing' "
+                "AND locked_at < now() - make_interval(secs => :secs)"
+            ),
+            {"secs": older_than_seconds},
+        )
+        return result.rowcount or 0  # type: ignore[attr-defined]
+
+    async def mark_done(self, job_id: uuid.UUID) -> None:
+        await self._db.execute(
+            update(KBJob)
+            .where(KBJob.id == job_id)
+            .values(status="done", locked_at=None, updated_at=func.now())
+        )
+
+    async def mark_failed(self, job_id: uuid.UUID, error: str, *, attempts: int) -> bool:
+        """Re-queue if attempts remain, else park as 'failed'. Returns will_retry."""
+        will_retry = attempts < MAX_JOB_ATTEMPTS
+        await self._db.execute(
+            update(KBJob)
+            .where(KBJob.id == job_id)
+            .values(
+                status="queued" if will_retry else "failed",
+                last_error=error[:500],
+                locked_at=None,
+                updated_at=func.now(),
+            )
+        )
+        return will_retry

@@ -5,8 +5,9 @@ Processing pipeline (per upload):
   2. ClamAV scan — fail-closed: reject if scan fails
   3. Dedup by SHA-256 hash within the same KB
   4. Store in Supabase Storage
-  5. INSERT kb_documents (status=pending) — return 202 immediately
-  6. BackgroundTask: parse → chunk → embed (batched 32) → store chunks → ready
+  5. INSERT kb_documents (status=pending) + enqueue kb_jobs — return 202 immediately
+  6. Dedicated worker drains kb_jobs: parse → chunk → embed (batched 32) → ready
+     (out-of-process, so a burst of uploads never blocks the API event loop)
 
 Search:
   vector_search (HNSW cosine, O(log n)) fused with BM25 via RRF (k=60).
@@ -19,27 +20,30 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import BackgroundTasks, HTTPException, UploadFile, status
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.document_processor.base import DocumentProcessorProtocol
+from wekala.adapters.document_processor.pypdf_adapter import PypdfAdapter
 from wekala.adapters.embedding.base import EmbeddingAdapter
+from wekala.adapters.embedding.ollama import OllamaEmbeddingAdapter
 from wekala.adapters.storage.base import ObjectStoreProtocol
+from wekala.adapters.storage.supabase import SupabaseStorageAdapter
 from wekala.adapters.virus_scanner.base import VirusScannerProtocol
+from wekala.adapters.virus_scanner.clamav import ClamAVAdapter
 from wekala.core.config import settings
 from wekala.core.constants import Action, Outcome, ResourceType
 from wekala.db.models import KBChunk
 from wekala.db.repositories.audit import AuditRepository
-from wekala.db.repositories.knowledge_base import ChunkRepository, DocumentRepository, KBRepository
+from wekala.db.repositories.knowledge_base import (
+    ChunkRepository,
+    DocumentRepository,
+    KBJobRepository,
+    KBRepository,
+)
 
 logger = logging.getLogger(__name__)
-
-# Serialize document processing across the whole process. Each job is
-# CPU/IO-heavy (parse, PII NER, embedding); running two concurrently on one
-# event loop is what made a second upload crash the API while the first was
-# still processing. One-at-a-time keeps the API responsive; queued docs sit
-# at status=pending until their turn.
-_PROCESSING_LOCK = asyncio.Semaphore(1)
 
 _ALLOWED_TYPES: dict[str, str] = {
     "pdf": "application/pdf",
@@ -110,6 +114,7 @@ class KnowledgeBaseService:
         self._kbs = KBRepository(db)
         self._docs = DocumentRepository(db)
         self._chunks = ChunkRepository(db)
+        self._jobs = KBJobRepository(db)
         self._audit = AuditRepository(db)
 
     # ------------------------------------------------------------------
@@ -173,7 +178,7 @@ class KnowledgeBaseService:
             )
 
     # ------------------------------------------------------------------
-    # Document Upload (202 Accepted + BackgroundTask)
+    # Document Upload (202 Accepted + enqueue kb_jobs)
     # ------------------------------------------------------------------
 
     async def upload_document(
@@ -183,7 +188,6 @@ class KnowledgeBaseService:
         workspace_id: uuid.UUID,
         actor_id: uuid.UUID,
         file: UploadFile,
-        background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
         # Validate KB exists
         kb = await self._kbs.get(kb_id, workspace_id)
@@ -252,122 +256,94 @@ class KnowledgeBaseService:
                 outcome=Outcome.SUCCESS,
             )
 
-        # Commit NOW, before scheduling the background task. FastAPI runs
-        # background tasks before the get_db transaction would otherwise
-        # commit, so without this explicit commit: (1) _process_document opens
-        # its own session and can't see the uncommitted doc, and (2) the
-        # client's immediate refetch returns an empty list. Same pattern the
-        # vetting service uses.
+        # Enqueue the processing job in the SAME transaction as the document, then
+        # commit both. The NOTIFY fires on commit so the worker only wakes once the
+        # document row is visible. Processing runs out-of-process in the worker —
+        # nothing heavy touches the API event loop.
+        await self._jobs.enqueue(document_id=doc.id, kb_id=kb_id, workspace_id=workspace_id)
         await self._db.commit()
-
-        # Kick off async processing — does not block the response
-        background_tasks.add_task(
-            self._process_document,
-            doc_id=doc.id,
-            kb_id=kb_id,
-            workspace_id=workspace_id,
-            content=content,
-            file_type=file_type,
-        )
 
         return {"document_id": str(doc.id), "status": "pending", "duplicate": False}
 
-    async def _process_document(
+    async def process_document(
         self,
         *,
         doc_id: uuid.UUID,
         kb_id: uuid.UUID,
         workspace_id: uuid.UUID,
-        content: bytes,
-        file_type: str,
     ) -> None:
-        """Background pipeline: parse → PII flag → chunk → embed → store.
+        """Worker pipeline: fetch → parse → PII flag → chunk → embed → store.
 
-        Uses a fresh DB session (background tasks run outside request context).
+        Runs on the caller's (worker's) session. Re-reads the file from object
+        storage by ``doc_id`` so the heavy bytes never ride the queue. Sets the
+        document 'processing' then 'ready'; **raises** on any failure so the
+        worker marks the job failed/retry and the document 'failed' in one place.
         """
-        from wekala.db.session import AsyncSessionLocal
+        doc = await self._docs.get(doc_id, workspace_id)
+        if not doc:
+            raise RuntimeError(f"document {doc_id} not found in workspace {workspace_id}")
+        content = await self._store.get(doc.storage_path)
+        file_type = doc.file_type
 
-        # One document processes at a time (see _PROCESSING_LOCK). The doc is
-        # already persisted as 'pending', so a queued one stays visible in the
-        # list and simply waits here for its turn.
-        async with _PROCESSING_LOCK, AsyncSessionLocal() as session:
-            docs = DocumentRepository(session)
-            chunks_repo = ChunkRepository(session)
+        await self._docs.set_status(doc_id, "processing")
+        await self._db.commit()
 
-            await docs.set_status(doc_id, "processing")
-            await session.commit()
+        # 1. Parse (offloaded to a thread inside the adapter)
+        pages = await self._processor.extract_pages(content, file_type)
+        page_count = len(pages)
 
-            try:
-                # 1. Parse (already offloaded to a thread inside the adapter)
-                pages = await self._processor.extract_pages(content, file_type)
-                page_count = len(pages)
+        # 2. PII flag (Phase 6 enforces; here we log). Presidio spaCy NER is
+        #    CPU-bound — offload off the loop.
+        await asyncio.to_thread(_flag_pii, pages, doc_id)
 
-                # 2. PII flag (Phase 6 will block; here we just log). Presidio
-                #    runs spaCy NER — CPU-bound, so offload it off the loop.
-                await asyncio.to_thread(_flag_pii, pages, doc_id)
+        # 3. Chunk — pure-Python string work; offload to stay responsive.
+        raw_chunks = await asyncio.to_thread(
+            _chunk_text,
+            pages,
+            settings.document_chunk_tokens,
+            settings.document_chunk_overlap,
+        )
+        total_tokens = sum(len(c["content"].split()) for c in raw_chunks)
 
-                # 3. Chunk — pure-Python string work; offload to stay responsive.
-                raw_chunks = await asyncio.to_thread(
-                    _chunk_text,
-                    pages,
-                    settings.document_chunk_tokens,
-                    settings.document_chunk_overlap,
-                )
-                total_tokens = sum(len(c["content"].split()) for c in raw_chunks)
+        # 4. Embed in batches of settings.embedding_batch_size
+        all_embeddings: list[list[float]] = []
+        batch_size = settings.embedding_batch_size
+        texts = [c["content"] for c in raw_chunks]
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            embeddings = await self._embedder.embed_batch(batch)
+            all_embeddings.extend(embeddings)
 
-                # 4. Embed in batches of settings.embedding_batch_size
-                all_embeddings: list[list[float]] = []
-                batch_size = settings.embedding_batch_size
-                texts = [c["content"] for c in raw_chunks]
-                for i in range(0, len(texts), batch_size):
-                    batch = texts[i : i + batch_size]
-                    embeddings = await self._embedder.embed_batch(batch)
-                    all_embeddings.extend(embeddings)
+        # 5. Build KBChunk objects and bulk insert
+        chunk_objs = [
+            KBChunk(
+                document_id=doc_id,
+                kb_id=kb_id,
+                workspace_id=workspace_id,
+                chunk_index=idx,
+                content=raw_chunks[idx]["content"],
+                token_count=max(1, len(raw_chunks[idx]["content"].split())),
+                chunk_metadata=raw_chunks[idx]["metadata"],
+            )
+            for idx in range(len(raw_chunks))
+        ]
+        await self._chunks.bulk_insert(chunk_objs)
 
-                # 5. Build KBChunk objects and bulk insert
-                chunk_objs = [
-                    KBChunk(
-                        document_id=doc_id,
-                        kb_id=kb_id,
-                        workspace_id=workspace_id,
-                        chunk_index=idx,
-                        content=raw_chunks[idx]["content"],
-                        token_count=max(1, len(raw_chunks[idx]["content"].split())),
-                        chunk_metadata=raw_chunks[idx]["metadata"],
-                    )
-                    for idx in range(len(raw_chunks))
-                ]
-                await chunks_repo.bulk_insert(chunk_objs)
+        # 6. Set embeddings via raw SQL (pgvector type)
+        for idx, emb in enumerate(all_embeddings):
+            vec = "[" + ",".join(str(v) for v in emb) + "]"
+            await self._db.execute(
+                sa_text(
+                    "UPDATE kb_chunks SET embedding = :emb ::vector"
+                    " WHERE document_id = :doc_id AND chunk_index = :idx"
+                ),
+                {"emb": vec, "doc_id": str(doc_id), "idx": idx},
+            )
 
-                # 6. Set embeddings via raw SQL (pgvector type)
-                for idx, emb in enumerate(all_embeddings):
-                    vec = "[" + ",".join(str(v) for v in emb) + "]"
-                    from sqlalchemy import text as sa_text
-
-                    await session.execute(
-                        sa_text(
-                            "UPDATE kb_chunks SET embedding = :emb ::vector"
-                            " WHERE document_id = :doc_id AND chunk_index = :idx"
-                        ),
-                        {"emb": vec, "doc_id": str(doc_id), "idx": idx},
-                    )
-
-                await docs.set_status(
-                    doc_id,
-                    "ready",
-                    page_count=page_count,
-                    token_count=total_tokens,
-                )
-                await session.commit()
-
-            except Exception as exc:  # noqa: BLE001
-                logger.error("Document processing failed for %s: %s", doc_id, exc, exc_info=True)
-                await session.rollback()
-                async with AsyncSessionLocal() as err_session:
-                    await DocumentRepository(err_session).set_status(
-                        doc_id, "failed", error_detail=str(exc)[:500]
-                    )
-                    await err_session.commit()
+        await self._docs.set_status(
+            doc_id, "ready", page_count=page_count, token_count=total_tokens
+        )
+        await self._db.commit()
 
     # ------------------------------------------------------------------
     # Document management
@@ -538,3 +514,27 @@ def _doc_out(doc: object) -> dict[str, Any]:
         "token_count": doc.token_count,  # type: ignore[attr-defined]
         "created_at": doc.created_at.isoformat(),  # type: ignore[attr-defined]
     }
+
+
+def build_kb_service(db: AsyncSession) -> KnowledgeBaseService:
+    """Construct the service with all production adapters from settings.
+
+    Shared by the API request dependency and the document worker so the adapter
+    wiring lives in exactly one place (Rule 7 DRY).
+    """
+    return KnowledgeBaseService(
+        db=db,
+        processor=PypdfAdapter(),
+        embedder=OllamaEmbeddingAdapter(
+            base_url=settings.ollama_url,
+            model=settings.embedding_model,
+        ),
+        scanner=ClamAVAdapter(
+            host=settings.clamav_host,
+            port=settings.clamav_port,
+        ),
+        store=SupabaseStorageAdapter(
+            storage_url=settings.supabase_storage_url,
+            service_key=settings.wekala_supabase_service_key,
+        ),
+    )

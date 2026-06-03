@@ -368,3 +368,75 @@ make test-phase-4
 - A second upload reuses the bucket without re-creating it
 
 - [ ] Pass  [ ] Fail
+
+---
+
+## Post-Phase-4: KB processing moved to a dedicated worker (kb_jobs queue)
+
+Document processing (parse → PII → chunk → embed → store) was moved **out of the
+API process** into a dedicated `wekala-worker` container, drained from a durable
+Postgres queue (`kb_jobs`). The API only enqueues + `NOTIFY`s on upload, so a
+burst of uploads can no longer block or crash the API event loop. Migration
+`0021_kb_jobs`. Worker started by `docker compose up -d wekala-worker`.
+
+> Prerequisite: the embedding model must be pulled (`ollama pull bge-m3`, or
+> `make pull-models`). Without it, processing fails at the embed step for both the
+> old and new code paths.
+
+### Scenario 1 — Happy path: upload → worker drains → ready
+**Steps:**
+1. `make migrate` (applies `0021_kb_jobs`); `docker compose up -d wekala-api wekala-worker`.
+2. In the UI, open a workspace → Knowledge Base → upload a small English PDF/TXT.
+3. Watch `docker compose logs -f wekala-worker`.
+
+**Expected:**
+- The document appears immediately as `pending` (the upload returns 202 without blocking).
+- The worker logs `claimed kb_job … → kb_job … done`; the document flips `pending → processing → ready` within ~30s.
+- `SELECT status FROM kb_jobs ORDER BY created_at DESC LIMIT 1;` → `done`.
+- Chunks exist: `SELECT count(*) FROM kb_chunks WHERE document_id = '<doc>';` > 0.
+
+- [ ] Pass  [ ] Fail
+
+### Scenario 2 — API stays responsive under an upload burst
+**Steps:**
+1. Upload 5–10 documents in quick succession.
+2. While they process, hit other API routes (list agents, dashboard).
+
+**Expected:**
+- All API requests stay fast (processing is on the worker, not the API).
+- `kb_jobs` drains one at a time (single-GPU budget); each doc reaches `ready`.
+
+- [ ] Pass  [ ] Fail
+
+### Scenario 3 — Failure handling + retry (verified live)
+**Steps:**
+1. Enqueue a job whose document points at a missing storage object.
+
+**Expected (confirmed 2026-06-03):**
+- Worker claims it, fails to fetch, sets the document `failed`, requeues, retries
+  up to 3 attempts, then parks the job `failed` with the error captured. The
+  worker process does **not** crash — it continues draining the queue.
+
+- [ ] Pass  [ ] Fail
+
+### Scenario 4 — Crash recovery (stale reclaim)
+**Steps:**
+1. Start processing a document, then `docker compose kill wekala-worker` mid-run.
+2. Restart: `docker compose up -d wekala-worker`.
+
+**Expected:**
+- The job left in `processing` is reclaimed (after `STALE_RECLAIM_SECONDS`) and
+  re-run to completion; no document is stuck forever.
+
+- [ ] Pass  [ ] Fail
+
+### Scenario 5 — Concurrency safety (optional, multi-worker)
+**Steps:**
+1. `docker compose up -d --scale wekala-worker=2`.
+2. Upload several documents.
+
+**Expected:**
+- No document is processed twice (claims use `FOR UPDATE SKIP LOCKED`); no
+  duplicate chunks. Throughput roughly doubles (until GPU-bound).
+
+- [ ] Pass  [ ] Fail

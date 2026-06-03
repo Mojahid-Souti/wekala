@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -389,6 +390,45 @@ class KBChunk(Base):
         "metadata", JSONB, nullable=False, default=dict
     )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class KBJob(Base):
+    """A queued document-processing job, drained by the dedicated worker.
+
+    The API enqueues one row per upload (status='queued') and NOTIFYs the
+    'kb_jobs' channel; the worker claims it with FOR UPDATE SKIP LOCKED, runs
+    the parse->embed pipeline out-of-process, and marks it done/failed. Keeping
+    this off the API event loop is what stops a burst of uploads taking the API
+    down.
+    """
+
+    __tablename__ = "kb_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','processing','done','failed')", name="kb_job_valid_status"
+        ),
+        CheckConstraint("attempts >= 0", name="kb_job_attempts_nonneg"),
+        Index("ix_kb_jobs_claim", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_documents.id", ondelete="CASCADE"), nullable=False
+    )
+    kb_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 
 # =============================================================================

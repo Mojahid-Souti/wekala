@@ -9,7 +9,6 @@ from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     HTTPException,
@@ -21,15 +20,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.auth.base import UserResult
-from wekala.adapters.document_processor.pypdf_adapter import PypdfAdapter
-from wekala.adapters.embedding.ollama import OllamaEmbeddingAdapter
-from wekala.adapters.storage.supabase import SupabaseStorageAdapter
-from wekala.adapters.virus_scanner.clamav import ClamAVAdapter
 from wekala.api.deps import check_opa, require_workspace_role
-from wekala.core.config import settings
 from wekala.core.constants import Action, Role
 from wekala.db.session import get_db
-from wekala.services.kb_service import KnowledgeBaseService
+from wekala.services.kb_service import KnowledgeBaseService, build_kb_service
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/kbs",
@@ -120,22 +114,7 @@ class SearchOut(BaseModel):
 
 
 def _get_kb_service(db: Annotated[AsyncSession, Depends(get_db)]) -> KnowledgeBaseService:
-    return KnowledgeBaseService(
-        db=db,
-        processor=PypdfAdapter(),
-        embedder=OllamaEmbeddingAdapter(
-            base_url=settings.ollama_url,
-            model=settings.embedding_model,
-        ),
-        scanner=ClamAVAdapter(
-            host=settings.clamav_host,
-            port=settings.clamav_port,
-        ),
-        store=SupabaseStorageAdapter(
-            storage_url=settings.supabase_storage_url,
-            service_key=settings.wekala_supabase_service_key,
-        ),
-    )
+    return build_kb_service(db)
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +203,6 @@ async def upload_document(
     kb_id: uuid.UUID,
     caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
     svc: Annotated[KnowledgeBaseService, Depends(_get_kb_service)],
-    background_tasks: BackgroundTasks,
     file: Annotated[UploadFile, File()],
 ) -> UploadAcceptedOut:
     current_user, caller_role = caller
@@ -237,7 +215,6 @@ async def upload_document(
         workspace_id=workspace_id,
         actor_id=current_user.id,
         file=file,
-        background_tasks=background_tasks,
     )
     return UploadAcceptedOut(
         document_id=result["document_id"],
