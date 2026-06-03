@@ -45,6 +45,20 @@ class KpiOut(BaseModel):
     range_days: int
 
 
+class ComputeCostOut(BaseModel):
+    total_tokens: int
+    runs: int
+    active_seconds: float
+    utilization_pct: float
+    marginal_usd_per_1m: float
+    effective_usd_per_1m: float
+    compute_cost_usd: float
+    cloud_equivalent_usd: float
+    savings_vs_cloud_usd: float
+    cloud_reference_name: str
+    range_days: int
+
+
 class TimeseriesPointOut(BaseModel):
     day: str
     invocations: int
@@ -110,6 +124,22 @@ async def get_kpis(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     summary = await AnalyticsService(db).kpis(workspace_id=workspace_id, range_days=range_days)
     return KpiOut(**summary.__dict__)
+
+
+@router.get("/analytics/compute-cost", response_model=ComputeCostOut)
+async def get_compute_cost(
+    workspace_id: uuid.UUID,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.VIEWER))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    range_days: int = Query(30, ge=1, le=365),
+) -> ComputeCostOut:
+    _, role = caller
+    if not await check_opa(Action.ANALYTICS_VIEW, role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    summary = await AnalyticsService(db).compute_cost(
+        workspace_id=workspace_id, range_days=range_days
+    )
+    return ComputeCostOut(**summary.__dict__)
 
 
 @router.get("/analytics/timeseries", response_model=list[TimeseriesPointOut])

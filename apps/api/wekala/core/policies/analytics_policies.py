@@ -85,6 +85,57 @@ def get_hours_saved_policy(path: Path | None = None) -> HoursSavedPolicy:
 
 
 # ---------------------------------------------------------------------------
+# Compute cost (local inference)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ComputeCostPolicy:
+    """Inputs for costing local (Ollama) inference: amortized hardware + energy.
+    All values are config-driven (Rule 5) — production swaps the numbers."""
+
+    hardware_capital_usd: float
+    hardware_useful_life_hours: float
+    ai_allocation_fraction: float  # share of hardware amortization charged to AI
+    gpu_power_watts: float
+    system_overhead_watts: float
+    electricity_usd_per_kwh: float
+    cloud_reference_usd_per_1m: float  # what the same tokens would cost in the cloud
+    cloud_reference_name: str
+
+    @property
+    def hardware_usd_per_hour(self) -> float:
+        if self.hardware_useful_life_hours <= 0:
+            return 0.0
+        return self.hardware_capital_usd / self.hardware_useful_life_hours
+
+    @property
+    def power_kw(self) -> float:
+        return (self.gpu_power_watts + self.system_overhead_watts) / 1000.0
+
+
+@lru_cache(maxsize=1)
+def get_compute_cost_policy(path: Path | None = None) -> ComputeCostPolicy:
+    src = _resolve_path(
+        path, env_var="WEKALA_COMPUTE_COST_POLICY_PATH", default_name="compute_cost.yaml"
+    )
+    raw = yaml.safe_load(src.read_text(encoding="utf-8")) or {}
+    hw = raw.get("hardware") or {}
+    en = raw.get("energy") or {}
+    cl = raw.get("cloud_reference") or {}
+    return ComputeCostPolicy(
+        hardware_capital_usd=float(hw.get("capital_usd", 3000)),
+        hardware_useful_life_hours=float(hw.get("useful_life_hours", 26280)),
+        ai_allocation_fraction=float(hw.get("ai_allocation_fraction", 1.0)),
+        gpu_power_watts=float(en.get("gpu_power_watts", 250)),
+        system_overhead_watts=float(en.get("system_overhead_watts", 120)),
+        electricity_usd_per_kwh=float(en.get("electricity_usd_per_kwh", 0.03)),
+        cloud_reference_usd_per_1m=float(cl.get("usd_per_1m_tokens", 0.60)),
+        cloud_reference_name=str(cl.get("name", "cloud equivalent")),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Anomaly rules
 # ---------------------------------------------------------------------------
 

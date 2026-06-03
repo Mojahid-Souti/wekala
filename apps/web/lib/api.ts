@@ -543,6 +543,12 @@ export const api = {
         {},
         token
       ),
+    computeCost: (workspaceId: string, rangeDays: number, token: string) =>
+      request<ComputeCostOut>(
+        `/v1/workspaces/${workspaceId}/analytics/compute-cost?range_days=${rangeDays}`,
+        {},
+        token
+      ),
     timeseries: (workspaceId: string, rangeDays: number, token: string) =>
       request<TimeseriesPointOut[]>(
         `/v1/workspaces/${workspaceId}/analytics/timeseries?range_days=${rangeDays}`,
@@ -631,6 +637,20 @@ export type KpiOut = {
   tool_calls: number;
   vetting_runs_completed: number;
   documents_uploaded: number;
+  range_days: number;
+};
+
+export type ComputeCostOut = {
+  total_tokens: number;
+  runs: number;
+  active_seconds: number;
+  utilization_pct: number;
+  marginal_usd_per_1m: number;
+  effective_usd_per_1m: number;
+  compute_cost_usd: number;
+  cloud_equivalent_usd: number;
+  savings_vs_cloud_usd: number;
+  cloud_reference_name: string;
   range_days: number;
 };
 

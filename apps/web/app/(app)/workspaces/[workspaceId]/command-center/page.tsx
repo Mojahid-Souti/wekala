@@ -26,6 +26,13 @@ export default function CommandCenterPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: cost } = useQuery({
+    queryKey: ["analytics-compute-cost", workspaceId, range],
+    queryFn: () => api.analytics.computeCost(workspaceId, range, token),
+    enabled: !!token,
+    refetchInterval: 60_000,
+  });
+
   const { data: series } = useQuery({
     queryKey: ["analytics-timeseries", workspaceId, range],
     queryFn: () => api.analytics.timeseries(workspaceId, Math.max(range, 7), token),
@@ -108,6 +115,54 @@ export default function CommandCenterPage() {
         />
         <KpiCard label="p95 latency" value={`${kpis?.p95_latency_ms ?? 0}`} unit="ms" />
         <KpiCard label="Tool calls" value={kpis?.tool_calls ?? 0} subtitle={`last ${range}d`} />
+      </section>
+
+      {/* Compute cost & ROI — local inference */}
+      <section className="rounded-lg border bg-white p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Compute cost &amp; ROI</h2>
+          <span className="text-xs text-gray-400">local inference · last {range}d</span>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Local models charge no per-token fee — the real cost is amortized hardware + electricity.
+          Cost per token falls as the GPU is used more.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <CostStat
+            label="Tokens processed"
+            value={cost ? cost.total_tokens.toLocaleString() : "—"}
+            sub={`${cost?.runs ?? 0} runs`}
+          />
+          <CostStat
+            label="$ / 1M (at throughput)"
+            value={cost ? `$${cost.marginal_usd_per_1m.toFixed(2)}` : "—"}
+            sub="marginal floor"
+          />
+          <CostStat
+            label="GPU utilization"
+            value={cost ? `${cost.utilization_pct.toFixed(2)}%` : "—"}
+            sub="active / calendar"
+          />
+          <CostStat
+            label="Compute cost"
+            value={cost ? `$${cost.compute_cost_usd.toFixed(2)}` : "—"}
+            sub={`amortized ${range}d`}
+          />
+        </div>
+        {cost && cost.total_tokens > 0 && (
+          <p className="mt-4 rounded-md border border-gray-100 bg-gray-50 p-3 text-xs leading-relaxed text-gray-600">
+            Effective cost ≈{" "}
+            <span className="font-semibold text-gray-900">
+              ${cost.effective_usd_per_1m.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              /1M
+            </span>{" "}
+            at {cost.utilization_pct.toFixed(2)}% utilization — dominated by idle hardware. It falls
+            toward the ${cost.marginal_usd_per_1m.toFixed(2)}/1M floor as usage grows.{" "}
+            {cost.savings_vs_cloud_usd >= 0
+              ? `That's $${cost.savings_vs_cloud_usd.toFixed(2)} cheaper than ${cost.cloud_reference_name} for this volume.`
+              : `${cost.cloud_reference_name} would bill only $${cost.cloud_equivalent_usd.toFixed(4)} for this volume — local wins at scale and keeps data on-prem (PDPL).`}
+          </p>
+        )}
       </section>
 
       {/* Timeseries (custom inline bar chart, no Recharts dep yet) */}
@@ -272,6 +327,16 @@ export default function CommandCenterPage() {
           <p className="text-sm text-gray-400">No audit events yet.</p>
         )}
       </section>
+    </div>
+  );
+}
+
+function CostStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold text-gray-900">{value}</p>
+      {sub && <p className="text-[11px] text-gray-400">{sub}</p>}
     </div>
   );
 }

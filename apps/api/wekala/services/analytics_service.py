@@ -17,14 +17,16 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import case, desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.core.policies.analytics_policies import (
+    ComputeCostPolicy,
     HoursSavedPolicy,
+    get_compute_cost_policy,
     get_hours_saved_policy,
 )
 from wekala.db.models import Agent, ApiRequestLog
@@ -60,15 +62,32 @@ class AgentLeaderboardRow:
     hours_saved: float
 
 
+@dataclass(frozen=True)
+class ComputeCostSummary:
+    total_tokens: int
+    runs: int
+    active_seconds: float
+    utilization_pct: float  # active inference time / calendar time
+    marginal_usd_per_1m: float  # cost/1M at the measured throughput (GPU busy)
+    effective_usd_per_1m: float  # honest cost: amortized hardware + energy / tokens
+    compute_cost_usd: float  # the period's local cost (hardware amortization + energy)
+    cloud_equivalent_usd: float
+    savings_vs_cloud_usd: float
+    cloud_reference_name: str
+    range_days: int
+
+
 class AnalyticsService:
     def __init__(
         self,
         db: AsyncSession,
         *,
         hours_saved: HoursSavedPolicy | None = None,
+        cost: ComputeCostPolicy | None = None,
     ) -> None:
         self._db = db
         self._hours_saved = hours_saved or get_hours_saved_policy()
+        self._cost = cost or get_compute_cost_policy()
 
     # ------------------------------------------------------------------
     # KPI summary
@@ -121,6 +140,72 @@ class AnalyticsService:
             tool_calls=int(row.tool_calls),
             vetting_runs_completed=int(row.vetting_runs_completed),
             documents_uploaded=int(row.documents_uploaded),
+            range_days=range_days,
+        )
+
+    # ------------------------------------------------------------------
+    # Compute cost (local inference)
+    # ------------------------------------------------------------------
+
+    async def compute_cost(
+        self, *, workspace_id: uuid.UUID, range_days: int = 30
+    ) -> ComputeCostSummary:
+        """Cost of local inference: amortized hardware + electricity over the
+        measured tokens. Tokens + latency come from `agent.test` audit metadata.
+        O(r) over agent.test rows in the window (indexed).
+        """
+        since = datetime.now(UTC) - timedelta(days=range_days)
+        row = (
+            await self._db.execute(
+                text(
+                    "SELECT COALESCE(SUM((metadata->>'tokens')::bigint), 0) AS total_tokens, "
+                    "COALESCE(SUM((metadata->>'latency_ms')::double precision), 0) AS latency_ms, "
+                    "COUNT(*) AS runs FROM audit_log "
+                    "WHERE action = 'agent.test' AND outcome = 'success' "
+                    "AND actor_workspace_id = :wid AND timestamp >= :since"
+                ),
+                {"wid": workspace_id, "since": since},
+            )
+        ).one()
+        total_tokens = int(row.total_tokens or 0)
+        active_seconds = float(row.latency_ms or 0) / 1000.0
+        runs = int(row.runs or 0)
+
+        p = self._cost
+        calendar_hours = range_days * 24
+        # Energy is paid only while the GPU works; hardware amortizes over the
+        # whole calendar window (it depreciates idle) — that's why low
+        # utilization makes the effective cost-per-token high.
+        energy_usd = p.power_kw * (active_seconds / 3600.0) * p.electricity_usd_per_kwh
+        hardware_usd = p.hardware_usd_per_hour * calendar_hours * p.ai_allocation_fraction
+        compute_cost_usd = energy_usd + hardware_usd
+
+        effective_per_1m = (compute_cost_usd / total_tokens * 1_000_000) if total_tokens else 0.0
+        if active_seconds > 0 and total_tokens > 0:
+            throughput_per_hour = total_tokens / (active_seconds / 3600.0)
+            marginal_per_1m = (
+                (p.hardware_usd_per_hour + p.power_kw * p.electricity_usd_per_kwh)
+                / throughput_per_hour
+                * 1_000_000
+            )
+        else:
+            marginal_per_1m = 0.0
+        utilization_pct = (
+            active_seconds / (calendar_hours * 3600.0) * 100 if calendar_hours else 0.0
+        )
+        cloud_equivalent_usd = total_tokens / 1_000_000 * p.cloud_reference_usd_per_1m
+
+        return ComputeCostSummary(
+            total_tokens=total_tokens,
+            runs=runs,
+            active_seconds=round(active_seconds, 1),
+            utilization_pct=round(utilization_pct, 3),
+            marginal_usd_per_1m=round(marginal_per_1m, 4),
+            effective_usd_per_1m=round(effective_per_1m, 4),
+            compute_cost_usd=round(compute_cost_usd, 4),
+            cloud_equivalent_usd=round(cloud_equivalent_usd, 4),
+            savings_vs_cloud_usd=round(cloud_equivalent_usd - compute_cost_usd, 4),
+            cloud_reference_name=p.cloud_reference_name,
             range_days=range_days,
         )
 

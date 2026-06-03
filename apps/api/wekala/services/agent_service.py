@@ -52,6 +52,21 @@ _ALLOWED_TRANSITIONS: dict[AgentStatus, set[AgentStatus]] = {
 }
 
 
+def _usage_metadata(dify_metadata: dict) -> dict | None:  # type: ignore[type-arg]
+    """Pull token count + latency out of a Dify usage block for the audit row.
+
+    Dify nests usage under metadata.usage. We persist `tokens` and `latency_ms`
+    so the Command Center can compute local compute cost (Phase 8 ext).
+    """
+    usage = (dify_metadata or {}).get("usage", {}) or {}
+    out: dict[str, object] = {}
+    if usage.get("total_tokens") is not None:
+        out["tokens"] = int(usage["total_tokens"])
+    if usage.get("latency") is not None:
+        out["latency_ms"] = round(float(usage["latency"]) * 1000, 1)
+    return out or None
+
+
 class AgentService:
     def __init__(self, db: AsyncSession, runtime: AgentRuntime) -> None:
         self._db = db
@@ -518,6 +533,7 @@ class AgentService:
             actor_workspace_id=agent.workspace_id,
             resource_type=ResourceType.AGENT,
             resource_id=agent.id,
+            metadata=_usage_metadata(result.get("usage", {})),
         )
 
         return result
@@ -553,10 +569,13 @@ class AgentService:
         workspace_id = agent.workspace_id
         agent_id = agent.id
         completed = False
+        usage_meta: dict = {}  # type: ignore[type-arg]
         try:
             async for item in self._runtime.stream_sandbox(
                 app_id=app_id, query=query, user_id=str(actor_id)
             ):
+                if "usage" in item:
+                    usage_meta = item["usage"]
                 yield item
             completed = True
         finally:
@@ -569,6 +588,7 @@ class AgentService:
                         actor_workspace_id=workspace_id,
                         resource_type=ResourceType.AGENT,
                         resource_id=agent_id,
+                        metadata=_usage_metadata(usage_meta),
                     )
 
     # ------------------------------------------------------------------

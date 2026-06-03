@@ -1,0 +1,25 @@
+# Cost of running agents on the LOCAL model (Ollama on the POC rig).
+# Cloud bills per token; local cost = amortized hardware + electricity.
+# All values are illustrative — tune for the real deployment.
+# Override path with WEKALA_COMPUTE_COST_POLICY_PATH.
+
+hardware:
+  # Capital cost of the box (or just the GPU) amortized over its useful life.
+  capital_usd: 3000
+  # 3 years × 8760 h. Hardware depreciates whether the GPU is busy or idle —
+  # that's why low utilization makes the effective cost-per-token high.
+  useful_life_hours: 26280
+  # Share of the box's amortization charged to AI (1.0 = dedicated AI machine).
+  ai_allocation_fraction: 1.0
+
+energy:
+  # RTX 5070 Ti under inference load + the rest of the system.
+  gpu_power_watts: 250
+  system_overhead_watts: 120
+  electricity_usd_per_kwh: 0.03
+
+cloud_reference:
+  # What the same token volume would cost on a comparable cloud model — drives
+  # the "savings vs cloud" / sovereignty ROI line in the Command Center.
+  name: "cloud (GPT-4o-mini class)"
+  usd_per_1m_tokens: 0.60
