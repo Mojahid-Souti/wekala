@@ -8,15 +8,19 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml .
 RUN uv sync --no-dev --no-install-project
 
-COPY . .
-RUN uv sync --no-dev
-
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Bake the Presidio spaCy model into the image so PII flagging never triggers a
-# runtime model download (which hangs behind the enterprise proxy). Both the API
-# and the KB worker depend on this — it must be present, not fetched at runtime.
-RUN python -m spacy download en_core_web_lg
+# Best-effort: bake the Presidio spaCy model so PII flagging works out of the box.
+# NON-FATAL — behind a TLS-intercepting corporate proxy the GitHub model download
+# fails (CERTIFICATE_VERIFY_FAILED), so we must not make the build depend on it.
+# When the model is absent the app degrades gracefully (PII flag no-ops; the
+# runtime checks `is_package` before loading, so it never tries to download/hang).
+# Placed before the app COPY so the layer caches across code changes.
+RUN python -m spacy download en_core_web_lg \
+    || echo "spaCy model not baked (offline/proxy) — PII flagging will no-op until provisioned"
+
+COPY . .
+RUN uv sync --no-dev
 
 EXPOSE 8001
 

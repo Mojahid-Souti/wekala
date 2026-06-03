@@ -448,13 +448,25 @@ def _get_pii_engine() -> Any:
     if not _pii_engine_loaded:
         _pii_engine_loaded = True
         try:
+            import spacy.util
+
+            # Construct the engine ONLY if the model is already installed. If it
+            # isn't, Presidio/spaCy would try to DOWNLOAD it — which hangs forever
+            # behind a TLS-intercepting proxy (no timeout, not an exception). PII
+            # flagging is best-effort in Phase 4 (Phase 6 enforces), so degrade to
+            # a no-op rather than block the worker.
+            if not spacy.util.is_package("en_core_web_lg"):
+                logger.warning(
+                    "spaCy model en_core_web_lg not installed — skipping PII flag "
+                    "(provision the model to enable PII detection)"
+                )
+                _pii_engine = None
+                return _pii_engine
+
             from presidio_analyzer import AnalyzerEngine
 
             _pii_engine = AnalyzerEngine()
         except Exception as exc:  # noqa: BLE001 — PII flag is best-effort in Phase 4
-            # Never let a missing/broken spaCy model block document processing.
-            # (Phase 6 enforces; here PII detection is log-only.) The model is
-            # baked into the image, so this should not normally fire.
             logger.warning("PII engine unavailable — skipping PII flag: %s", exc)
             _pii_engine = None
     return _pii_engine
