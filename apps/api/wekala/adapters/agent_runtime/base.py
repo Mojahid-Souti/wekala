@@ -40,3 +40,12 @@ class AgentRuntime(Protocol):
     async def delete_app(self, app_id: str) -> None:
         """Delete a Dify app by its app_id."""
         ...
+
+    async def list_apps(self) -> list[dict]:  # type: ignore[type-arg]
+        """List apps in the connected runtime (Build-in-Dify round-trip).
+        Returns ``[{id, name, mode, description}]``."""
+        ...
+
+    async def export_app_dsl(self, app_id: str) -> str:
+        """Export an app's definition as DSL YAML, for re-import as a Wekala agent."""
+        ...

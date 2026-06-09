@@ -174,6 +174,17 @@ class ImportFromTemplateIn(BaseModel):
     template_id: str
 
 
+class ImportFromDifyIn(BaseModel):
+    dify_app_id: str = Field(..., min_length=1, max_length=100)
+
+
+class DifyAppOut(BaseModel):
+    id: str
+    name: str
+    mode: str
+    description: str
+
+
 class TestAgentIn(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
 
@@ -290,6 +301,45 @@ async def import_agent_template(
         owner_id=user.id,
         template_id=body.template_id,
         templates=_TEMPLATES,
+    )
+    return AgentOut.from_orm(agent)
+
+
+@router.get("/workspaces/{workspace_id}/dify-apps", response_model=list[DifyAppOut])
+async def list_dify_apps(
+    workspace_id: uuid.UUID,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[DifyAppOut]:
+    """List the connected Dify workspace's apps for the Build-in-Dify import picker.
+
+    NOTE: Dify runs as a single shared workspace in the POC, so this lists every
+    app in that workspace (not just the caller's). The import still lands the
+    agent in this Wekala workspace. Per-workspace Dify projects are a prod concern.
+    """
+    svc = AgentService(db, _runtime())
+    apps = await svc.list_dify_apps()
+    return [DifyAppOut(**a) for a in apps]
+
+
+@router.post(
+    "/workspaces/{workspace_id}/agents/import-from-dify",
+    response_model=AgentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_agent_from_dify(
+    workspace_id: uuid.UUID,
+    body: ImportFromDifyIn,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AgentOut:
+    """Export a Dify app's DSL and import it as a Draft + Unvetted agent. O(s)."""
+    user, _ = caller
+    svc = AgentService(db, _runtime())
+    agent = await svc.import_from_dify_app(
+        workspace_id=workspace_id,
+        owner_id=user.id,
+        dify_app_id=body.dify_app_id,
     )
     return AgentOut.from_orm(agent)
 

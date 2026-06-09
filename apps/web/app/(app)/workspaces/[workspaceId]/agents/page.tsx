@@ -22,6 +22,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -141,13 +142,20 @@ export default function AgentsPage({ params }: Props) {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-neutral-950">Create an agent</h2>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <ActionCard
             icon={<Pencil className="size-4" />}
             title="Build from scratch"
             description="Open the visual canvas to design nodes, prompts, and flows."
             ctaLabel="Open canvas"
             href={ROUTES.agentsBuild(workspaceId)}
+          />
+          <ActionCard
+            icon={<Workflow className="size-4" />}
+            title="Build in Dify"
+            description="Design an agent in the Dify studio, then import it back here."
+            ctaLabel="Open Dify"
+            href={`${ROUTES.newAgent(workspaceId)}?tab=dify`}
           />
           <ActionCard
             icon={<LayoutTemplate className="size-4" />}

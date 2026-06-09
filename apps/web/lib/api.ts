@@ -94,6 +94,13 @@ export type AgentOut = {
   updated_at: string;
 };
 
+export type DifyAppOut = {
+  id: string;
+  name: string;
+  mode: string;
+  description: string;
+};
+
 export type AgentVersionOut = {
   id: string;
   agent_id: string;
@@ -252,6 +259,14 @@ export const api = {
       request<AgentOut>(
         `/v1/workspaces/${workspaceId}/agent-imports/template`,
         { method: "POST", body: JSON.stringify({ template_id: templateId }) },
+        token
+      ),
+    difyApps: (workspaceId: string, token: string) =>
+      request<DifyAppOut[]>(`/v1/workspaces/${workspaceId}/dify-apps`, {}, token),
+    importFromDify: (workspaceId: string, difyAppId: string, token: string) =>
+      request<AgentOut>(
+        `/v1/workspaces/${workspaceId}/agents/import-from-dify`,
+        { method: "POST", body: JSON.stringify({ dify_app_id: difyAppId }) },
         token
       ),
     publish: (workspaceId: string, agentId: string, token: string) =>

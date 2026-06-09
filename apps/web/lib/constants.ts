@@ -41,4 +41,7 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001
 
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost:8000";
 
+// Dify web studio — where users build apps before importing them back (Phase 15).
+export const DIFY_STUDIO_URL = process.env.NEXT_PUBLIC_DIFY_URL ?? "http://localhost:3000";
+
 export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";

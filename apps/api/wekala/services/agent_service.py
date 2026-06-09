@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from fastapi import BackgroundTasks, HTTPException, status
@@ -157,6 +157,44 @@ class AgentService:
             )
 
         return agent
+
+    async def list_dify_apps(self) -> list[dict[str, Any]]:
+        """List the connected Dify workspace's apps for the import picker."""
+        try:
+            return await self._runtime.list_apps()
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail="Couldn't reach Dify"
+            ) from exc
+
+    async def import_from_dify_app(
+        self, *, workspace_id: uuid.UUID, owner_id: uuid.UUID, dify_app_id: str
+    ) -> Agent:
+        """Export a Dify app's DSL and import it as a new Draft + Unvetted agent.
+
+        Reuses the YAML import path (validation, versioning, audit), so the result
+        is identical to an upload and must still pass the gatekeeper before publish.
+        """
+        try:
+            dsl_yaml = await self._runtime.export_app_dsl(dify_app_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Dify app not found"
+                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail="Couldn't reach Dify"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail="Couldn't reach Dify"
+            ) from exc
+        return await self.import_from_yaml(
+            workspace_id=workspace_id,
+            owner_id=owner_id,
+            raw_yaml=dsl_yaml.encode("utf-8"),
+            filename=f"dify-{dify_app_id}.yaml",
+        )
 
     async def import_from_template(
         self,

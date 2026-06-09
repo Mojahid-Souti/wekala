@@ -189,3 +189,34 @@ class DifyAdapter:
             r = await client.delete(f"{self._base}/apps/{app_id}")
             if r.status_code not in (200, 204, 404):
                 r.raise_for_status()
+
+    async def list_apps(self) -> list[dict[str, Any]]:
+        """List apps in the connected Dify workspace (Build-in-Dify round-trip).
+
+        Returns the lightweight fields the import picker needs. O(1) network
+        (single page, capped at 100 — a workspace won't have more in the POC).
+        """
+        async with self._client() as client:
+            r = await client.get(f"{self._base}/apps", params={"page": 1, "limit": 100})
+            r.raise_for_status()
+            data = r.json().get("data", [])
+            return [
+                {
+                    "id": a.get("id"),
+                    "name": a.get("name", ""),
+                    "mode": a.get("mode", ""),
+                    "description": a.get("description", ""),
+                }
+                for a in data
+                if a.get("id")
+            ]
+
+    async def export_app_dsl(self, app_id: str) -> str:
+        """Export a Dify app's DSL YAML. Raises httpx errors (404 = app gone). O(1)."""
+        async with self._client() as client:
+            r = await client.get(f"{self._base}/apps/{app_id}/export")
+            r.raise_for_status()
+            dsl = r.json().get("data")
+            if not isinstance(dsl, str) or not dsl.strip():
+                raise RuntimeError("Dify export returned no DSL")
+            return dsl
