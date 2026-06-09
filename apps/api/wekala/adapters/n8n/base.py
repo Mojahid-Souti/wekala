@@ -33,6 +33,16 @@ class N8nSession:
     n8n_user_id: uuid.UUID
 
 
+@dataclass(frozen=True)
+class N8nWorkflowInfo:
+    """Lightweight view of one n8n workflow, for listing inside Wekala's UI."""
+
+    id: str
+    name: str
+    active: bool
+    updated_at: str | None
+
+
 class OwnerAlreadyExistsError(Exception):
     """Raised when POST /rest/owner/setup is called but n8n already has an owner."""
 
@@ -61,3 +71,7 @@ class N8nService(Protocol):
     ) -> None: ...
 
     async def login_user(self, email: str, password: str) -> N8nSession: ...
+
+    async def list_workflows(self, cookie: str) -> list[N8nWorkflowInfo]:
+        """List the workflows owned by the session behind `cookie` (n8n-auth)."""
+        ...

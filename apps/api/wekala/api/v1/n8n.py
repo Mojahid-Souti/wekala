@@ -27,6 +27,13 @@ class N8nSessionResponse(BaseModel):
     cookie_path: str = "/n8n"
 
 
+class WorkflowOut(BaseModel):
+    id: str
+    name: str
+    active: bool
+    updated_at: str | None = None
+
+
 @router.post("/session", response_model=N8nSessionResponse)
 async def create_n8n_session(
     current_user: Annotated[UserResult, Depends(get_current_user)],
@@ -51,3 +58,27 @@ async def create_n8n_session(
         cookie_value=session.cookie_value,
         max_age_s=session.max_age_s,
     )
+
+
+@router.get("/workflows", response_model=list[WorkflowOut])
+async def list_n8n_workflows(
+    current_user: Annotated[UserResult, Depends(get_current_user)],
+    n8n: Annotated[N8nService, Depends(get_n8n_service)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[WorkflowOut]:
+    """List the current user's own n8n workflows, surfaced inside Wekala's UI.
+
+    Uses the caller's provisioned n8n session, so a user only ever sees their
+    own workflows (per-user n8n accounts, Phase B). O(1) — one login + one GET.
+    """
+    session = await n8n_provisioning.ensure_session(
+        db=db,
+        n8n=n8n,
+        supabase_user_id=current_user.id,
+        wekala_full_name=None,
+    )
+    workflows = await n8n.list_workflows(session.cookie_value)
+    return [
+        WorkflowOut(id=w.id, name=w.name, active=w.active, updated_at=w.updated_at)
+        for w in workflows
+    ]

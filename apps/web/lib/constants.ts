@@ -17,6 +17,7 @@ export const ROUTES = {
   agentsBuild: (workspaceId: string) => `/workspaces/${workspaceId}/agents/build`,
   agentsTemplates: (workspaceId: string) => `/workspaces/${workspaceId}/agents/templates`,
   agentsImport: (workspaceId: string) => `/workspaces/${workspaceId}/agents/import`,
+  workflows: (workspaceId: string) => `/workspaces/${workspaceId}/workflows`,
   agentDetail: (workspaceId: string, agentId: string) =>
     `/workspaces/${workspaceId}/agents/${agentId}`,
   agentVetting: (workspaceId: string, agentId: string) =>

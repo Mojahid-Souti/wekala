@@ -21,6 +21,7 @@ import {
   Sparkles,
   Store,
   Users,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
@@ -116,6 +117,7 @@ function useNavGroups(workspaceId: string | null): NavGroup[] {
               },
           leaf(ROUTES.knowledgeBase, BookOpen, "Knowledge base", "knowledge-base"),
           leaf(ROUTES.tools, Wrench, "Tools"),
+          leaf(ROUTES.workflows, Workflow, "Workflows"),
           leaf(ROUTES.commandCenter, BarChart3, "Dashboard", "dashboard"),
         ],
       },

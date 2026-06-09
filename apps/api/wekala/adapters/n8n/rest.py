@@ -15,6 +15,7 @@ from wekala.adapters.n8n.base import (
     N8nService,
     N8nSession,
     N8nUser,
+    N8nWorkflowInfo,
     OwnerAlreadyExistsError,
 )
 
@@ -159,6 +160,24 @@ class N8nRestAdapter(N8nService):
                 n8n_user_id=n8n_user_id,
             )
         raise RuntimeError("n8n login rate limit not cleared after retry")
+
+    async def list_workflows(self, cookie: str) -> list[N8nWorkflowInfo]:
+        async with httpx.AsyncClient(
+            timeout=DEFAULT_TIMEOUT_S, cookies={AUTH_COOKIE_NAME: cookie}
+        ) as client:
+            r = await client.get(f"{self._base_url}/rest/workflows")
+            r.raise_for_status()
+            rows = r.json().get("data", [])
+        return [
+            N8nWorkflowInfo(
+                id=str(w["id"]),
+                name=w.get("name", ""),
+                active=bool(w.get("active", False)),
+                updated_at=w.get("updatedAt"),
+            )
+            for w in rows
+            if w.get("id") is not None
+        ]
 
 
 # Safety: redact tokens from log messages where this adapter is invoked.

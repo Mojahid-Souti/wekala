@@ -11,7 +11,17 @@ import {
 } from "@/components/ui/command";
 import { ROUTES } from "@/lib/constants";
 import { useIsMac } from "@/lib/use-platform";
-import { BarChart3, BookOpen, Home, Settings, Sparkles, Store, Users, Wrench } from "lucide-react";
+import {
+  BarChart3,
+  BookOpen,
+  Home,
+  Settings,
+  Sparkles,
+  Store,
+  Users,
+  Workflow,
+  Wrench,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useWorkspaces } from "./workspace-context";
@@ -93,6 +103,13 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
                 <CommandItem onSelect={() => go(ROUTES.tools(currentWs.id))} className="gap-2.5">
                   <Wrench className="size-4 text-neutral-500" />
                   Tools
+                </CommandItem>
+                <CommandItem
+                  onSelect={() => go(ROUTES.workflows(currentWs.id))}
+                  className="gap-2.5"
+                >
+                  <Workflow className="size-4 text-neutral-500" />
+                  Workflows
                 </CommandItem>
                 <CommandItem
                   onSelect={() => go(ROUTES.commandCenter(currentWs.id))}
