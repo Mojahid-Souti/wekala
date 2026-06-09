@@ -28,7 +28,7 @@ import { use, useState } from "react";
 
 type Props = { params: Promise<{ workspaceId: string }> };
 
-const TABS = ["template", "upload", "dify"] as const;
+const TABS = ["template", "upload", "studio"] as const;
 
 export default function NewAgentPage({ params }: Props) {
   const { workspaceId } = use(params);
@@ -46,7 +46,7 @@ export default function NewAgentPage({ params }: Props) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-950">New agent</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Start from a template, import a Dify YAML, or build visually on the canvas.
+            Start from a template, upload a YAML, or build visually in the studio.
           </p>
         </div>
       </header>
@@ -59,8 +59,8 @@ export default function NewAgentPage({ params }: Props) {
           <TabsTrigger value="upload" className="flex-none gap-1.5">
             <FileUp className="size-4" /> Upload YAML
           </TabsTrigger>
-          <TabsTrigger value="dify" className="flex-none gap-1.5">
-            <Workflow className="size-4" /> Build in Dify
+          <TabsTrigger value="studio" className="flex-none gap-1.5">
+            <Workflow className="size-4" /> Studio
           </TabsTrigger>
         </TabsList>
 
@@ -70,15 +70,15 @@ export default function NewAgentPage({ params }: Props) {
         <TabsContent value="upload" className="pt-4">
           <ImportYamlForm workspaceId={workspaceId} />
         </TabsContent>
-        <TabsContent value="dify" className="pt-4">
-          <BuildInDify workspaceId={workspaceId} />
+        <TabsContent value="studio" className="pt-4">
+          <BuildInStudio workspaceId={workspaceId} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function BuildInDify({ workspaceId }: { workspaceId: string }) {
+function BuildInStudio({ workspaceId }: { workspaceId: string }) {
   const token = useToken();
   const { toast } = useToast();
   const router = useRouter();
@@ -91,7 +91,7 @@ function BuildInDify({ workspaceId }: { workspaceId: string }) {
     refetch,
     isRefetching,
   } = useQuery({
-    queryKey: ["dify-apps", workspaceId],
+    queryKey: ["studio-apps", workspaceId],
     queryFn: () => api.agents.difyApps(workspaceId, token),
     enabled: !!token,
   });
@@ -110,21 +110,23 @@ function BuildInDify({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="max-w-2xl space-y-5">
-      {/* Step 1 — build it in Dify */}
+      {/* Step 1 — build it in the studio */}
       <div className="rounded-xl border border-neutral-200 bg-white p-5">
         <div className="flex items-start gap-3">
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-neutral-100 text-neutral-700">
             <Workflow className="size-4" />
           </span>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-neutral-950">Step 1 · Build it in Dify</h3>
+            <h3 className="text-sm font-semibold text-neutral-950">
+              Step 1 · Build it in the studio
+            </h3>
             <p className="mt-0.5 text-sm text-neutral-500">
-              Design your app — prompts, model, and tools — in the Dify studio, then come back here
-              to import it.
+              Design your app — prompts, model, and tools — in the visual studio, then come back
+              here to import it.
             </p>
             <Button asChild variant="outline" className="mt-3">
               <a href={DIFY_STUDIO_URL} target="_blank" rel="noreferrer noopener">
-                Open Dify Studio
+                Open studio
                 <ExternalLink className="size-3.5" />
               </a>
             </Button>
@@ -140,7 +142,9 @@ function BuildInDify({ workspaceId }: { workspaceId: string }) {
               <Download className="size-4" />
             </span>
             <div>
-              <h3 className="text-sm font-semibold text-neutral-950">Step 2 · Import from Dify</h3>
+              <h3 className="text-sm font-semibold text-neutral-950">
+                Step 2 · Import what you built
+              </h3>
               <p className="mt-0.5 text-sm text-neutral-500">
                 Pick the app you built. It imports as a Draft and must pass the gatekeeper before
                 publish.
@@ -171,11 +175,11 @@ function BuildInDify({ workspaceId }: { workspaceId: string }) {
             </div>
           ) : isError ? (
             <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              Couldn't reach Dify. Make sure the Dify service is running, then refresh.
+              Couldn't reach the studio. Make sure it's running, then refresh.
             </p>
           ) : !apps || apps.length === 0 ? (
             <p className="py-6 text-center text-sm text-neutral-400">
-              No Dify apps yet. Build one in the studio, then refresh.
+              Nothing to import yet. Build one in the studio, then refresh.
             </p>
           ) : (
             <ul className="divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200">
@@ -209,7 +213,7 @@ function BuildInDify({ workspaceId }: { workspaceId: string }) {
           )}
         </div>
         <p className="mt-3 text-xs text-neutral-400">
-          Apps come from the shared Dify workspace (POC); the imported agent lands in this
+          These come from the shared studio workspace (POC); the imported agent lands in this
           workspace.
         </p>
       </div>

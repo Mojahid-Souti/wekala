@@ -101,13 +101,6 @@ export type DifyAppOut = {
   description: string;
 };
 
-export type WorkflowOut = {
-  id: string;
-  name: string;
-  active: boolean;
-  updated_at: string | null;
-};
-
 export type AgentVersionOut = {
   id: string;
   agent_id: string;
@@ -626,10 +619,6 @@ export const api = {
       ),
     events: (workspaceId: string, token: string) =>
       request<string[]>(`/v1/workspaces/${workspaceId}/webhooks/events`, {}, token),
-  },
-  n8n: {
-    // The caller's own n8n workflows (per-user session), surfaced inside Wekala.
-    workflows: (token: string) => request<WorkflowOut[]>("/v1/n8n/workflows", {}, token),
   },
 };
 

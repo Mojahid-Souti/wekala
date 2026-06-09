@@ -257,7 +257,7 @@ export function ImportYamlForm({ workspaceId }: { workspaceId: string }) {
                 <UploadCloud className="size-5" />
               </div>
               <p className="mt-4 text-sm font-medium text-neutral-950">
-                Drop a Dify YAML here, or click to browse
+                Drop an agent YAML here, or click to browse
               </p>
               <p className="mt-1 text-xs text-neutral-500">.yaml or .yml · up to 1 MB</p>
               <input

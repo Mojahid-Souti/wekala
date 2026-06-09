@@ -1,100 +1,59 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
-import { ROUTES } from "@/lib/constants";
-import { useToken } from "@/lib/use-token";
-import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Workflow } from "lucide-react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+export const dynamic = "force-dynamic";
+
+import { N8nCanvas } from "@/components/agent/n8n-canvas";
+import { useWorkspaces } from "@/components/app/workspace-context";
+import { useStudioSession } from "@/lib/use-n8n-session";
+import { Loader2, Workflow } from "lucide-react";
 
 export default function WorkflowsPage() {
-  const { workspaceId } = useParams<{ workspaceId: string }>();
-  const token = useToken();
+  const { current } = useWorkspaces();
+  const workspaceName = current?.name ?? "Workspace";
 
-  const { data: workflows, isLoading } = useQuery({
-    queryKey: ["n8n-workflows", workspaceId],
-    queryFn: () => api.n8n.workflows(token),
-    enabled: !!token,
-  });
+  // Mint a per-user studio session before the embedded canvas mounts.
+  const { state: sessionState, error: sessionError } = useStudioSession();
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-5 py-6 lg:px-7">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+      <div className="flex items-center gap-3 border-b border-neutral-200 bg-white px-5 py-3">
+        <span className="grid size-8 place-items-center rounded-md bg-neutral-100 text-neutral-600">
+          <Workflow className="size-4" />
+        </span>
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">Workflows</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Your n8n automations, inside Wekala. Build and edit them on the embedded studio.
+          <h1 className="text-base font-semibold text-neutral-950">Workflows</h1>
+          <p className="text-xs text-neutral-500">
+            Build and manage your automations on the canvas.
           </p>
         </div>
-        <Button asChild>
-          <Link href={ROUTES.agentsBuild(workspaceId)}>
-            <Workflow className="size-4" /> Open n8n studio
-          </Link>
-        </Button>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-neutral-200/80 bg-white shadow-sm">
-        {isLoading ? (
-          <div className="divide-y divide-neutral-100">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-3 px-5 py-4">
-                <div className="size-9 animate-pulse rounded-lg bg-neutral-100" />
-                <div className="h-4 w-48 animate-pulse rounded bg-neutral-100" />
-              </div>
-            ))}
-          </div>
-        ) : workflows && workflows.length > 0 ? (
-          <ul className="divide-y divide-neutral-100">
-            {workflows.map((wf) => (
-              <li key={wf.id} className="flex items-center justify-between gap-3 px-5 py-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-600">
-                    <Workflow className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-neutral-900">
-                      {wf.name || "Untitled workflow"}
-                    </p>
-                    {wf.updated_at && (
-                      <p className="text-xs text-neutral-400">
-                        Updated {new Date(wf.updated_at).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                    wf.active ? "bg-emerald-50 text-emerald-600" : "bg-neutral-100 text-neutral-500"
-                  )}
-                >
-                  {wf.active ? "Active" : "Inactive"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="flex flex-col items-center justify-center gap-3 px-5 py-16 text-center">
-            <span className="inline-flex size-11 items-center justify-center rounded-xl bg-neutral-100 text-neutral-400">
-              <Workflow className="size-5" />
-            </span>
-            <div>
-              <p className="text-sm font-medium text-neutral-900">No workflows yet</p>
-              <p className="mt-0.5 text-sm text-neutral-500">
-                Open the n8n studio to create your first automation.
-              </p>
+      <div className="relative flex-1 overflow-hidden bg-neutral-50">
+        {sessionState === "minting" && (
+          <div className="absolute inset-0 grid place-items-center bg-neutral-50">
+            <div className="flex items-center gap-3 text-sm text-neutral-500">
+              <Loader2 className="size-4 animate-spin" />
+              Preparing your workspace…
             </div>
-            <Button asChild variant="outline">
-              <Link href={ROUTES.agentsBuild(workspaceId)}>
-                Open n8n studio <ExternalLink className="size-3.5" />
-              </Link>
-            </Button>
           </div>
         )}
-      </section>
+        {sessionState === "error" && (
+          <div className="absolute inset-0 grid place-items-center bg-neutral-50 p-6">
+            <div className="max-w-md text-center">
+              <p className="text-sm font-medium text-neutral-950">Could not load workflows.</p>
+              <p className="mt-2 text-xs text-neutral-500">{sessionError}</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-4 inline-flex h-8 items-center rounded-md bg-neutral-950 px-3 text-xs font-medium text-white hover:bg-neutral-800"
+              >
+                Reload
+              </button>
+            </div>
+          </div>
+        )}
+        {sessionState === "ready" && <N8nCanvas workspaceName={workspaceName} />}
+      </div>
     </div>
   );
 }

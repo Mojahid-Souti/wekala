@@ -19,7 +19,7 @@ export default async function ImportAgentPage({ params }: Props) {
         </Link>
         <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">Import a YAML</h1>
         <p className="text-sm text-neutral-500">
-          Upload an existing Dify agent definition to register it in this workspace.
+          Upload an existing agent definition (YAML) to register it in this workspace.
         </p>
       </header>
 

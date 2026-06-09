@@ -152,10 +152,10 @@ export default function AgentsPage({ params }: Props) {
           />
           <ActionCard
             icon={<Workflow className="size-4" />}
-            title="Build in Dify"
-            description="Design an agent in the Dify studio, then import it back here."
-            ctaLabel="Open Dify"
-            href={`${ROUTES.newAgent(workspaceId)}?tab=dify`}
+            title="Studio"
+            description="Design an agent in the visual studio, then import it back here."
+            ctaLabel="Open studio"
+            href={`${ROUTES.newAgent(workspaceId)}?tab=studio`}
           />
           <ActionCard
             icon={<LayoutTemplate className="size-4" />}
@@ -167,7 +167,7 @@ export default function AgentsPage({ params }: Props) {
           <ActionCard
             icon={<FileUp className="size-4" />}
             title="Import a YAML"
-            description="Upload an existing Dify agent definition to register it here."
+            description="Upload an existing agent definition (YAML) to register it here."
             ctaLabel="Upload YAML"
             href={ROUTES.agentsImport(workspaceId)}
           />

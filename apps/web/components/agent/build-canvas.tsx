@@ -213,7 +213,7 @@ const PALETTE_GROUPS: { label: string; items: PaletteEntry[] }[] = [
     ],
   },
   {
-    label: "Connectors (via n8n)",
+    label: "Connectors",
     items: [
       {
         kind: "email",

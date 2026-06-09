@@ -4,80 +4,22 @@ export const dynamic = "force-dynamic";
 
 import { N8nCanvas } from "@/components/agent/n8n-canvas";
 import { useWorkspaces } from "@/components/app/workspace-context";
-import { getToken } from "@/lib/auth-storage";
 import { ROUTES } from "@/lib/constants";
+import { useStudioSession } from "@/lib/use-n8n-session";
 import { ArrowLeft, Loader2, Save, Workflow } from "lucide-react";
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use } from "react";
 
 type Props = { params: Promise<{ workspaceId: string }> };
-
-type SessionState = "minting" | "ready" | "error";
-
-// Module-scoped Promise cache: React 19 StrictMode and rapid component
-// remounts can fire the session mint multiple times before the cookie is
-// set. Share one in-flight request so n8n's /rest/login rate limit isn't
-// tripped by our own dev tooling.
-let inFlightMint: Promise<Response> | null = null;
-async function sharedMintRequest(token: string): Promise<Response> {
-  if (inFlightMint) return inFlightMint;
-  inFlightMint = fetch("/api/n8n-session", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  }).finally(() => {
-    // Clear after a short grace window so genuine re-mints later still work.
-    setTimeout(() => {
-      inFlightMint = null;
-    }, 2000);
-  });
-  return inFlightMint;
-}
 
 export default function BuildAgentPage({ params }: Props) {
   const { workspaceId } = use(params);
   const { current } = useWorkspaces();
   const workspaceName = current?.name ?? "Workspace";
 
-  // Phase B multi-tenancy: mint a per-user n8n session BEFORE the iframe
-  // mounts. The route handler sets an HttpOnly n8n-auth cookie on the
-  // response so the iframe loads with this user's private n8n workspace.
-  const [sessionState, setSessionState] = useState<SessionState>("minting");
-  const [sessionError, setSessionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function mintSession() {
-      const token = getToken();
-      if (!token) {
-        if (!cancelled) {
-          setSessionState("error");
-          setSessionError("You are not signed in.");
-        }
-        return;
-      }
-      try {
-        // Dedupe: React 19 StrictMode double-invokes effects in dev, which
-        // doubles the /api/n8n-session traffic and trips n8n's login rate
-        // limit. Share a single in-flight Promise across concurrent calls.
-        const res = await sharedMintRequest(token);
-        if (!res.ok) {
-          const body = await res.clone().text();
-          throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-        }
-        if (!cancelled) setSessionState("ready");
-      } catch (err) {
-        if (!cancelled) {
-          setSessionState("error");
-          setSessionError(err instanceof Error ? err.message : String(err));
-        }
-      }
-    }
-    void mintSession();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Mint a per-user studio session BEFORE the iframe mounts so it loads with
+  // this user's private canvas (the route handler sets the auth cookie).
+  const { state: sessionState, error: sessionError } = useStudioSession();
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
