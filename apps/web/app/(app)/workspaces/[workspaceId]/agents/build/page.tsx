@@ -3,12 +3,13 @@
 export const dynamic = "force-dynamic";
 
 import { N8nCanvas } from "@/components/agent/n8n-canvas";
+import { PublishWorkflowModal } from "@/components/agent/publish-workflow-modal";
 import { useWorkspaces } from "@/components/app/workspace-context";
 import { ROUTES } from "@/lib/constants";
 import { useStudioSession } from "@/lib/use-n8n-session";
 import { ArrowLeft, Loader2, Save, Workflow } from "lucide-react";
 import Link from "next/link";
-import { use } from "react";
+import { use, useState } from "react";
 
 type Props = { params: Promise<{ workspaceId: string }> };
 
@@ -16,6 +17,7 @@ export default function BuildAgentPage({ params }: Props) {
   const { workspaceId } = use(params);
   const { current } = useWorkspaces();
   const workspaceName = current?.name ?? "Workspace";
+  const [publishOpen, setPublishOpen] = useState(false);
 
   // Mint a per-user studio session BEFORE the iframe mounts so it loads with
   // this user's private canvas (the route handler sets the auth cookie).
@@ -43,12 +45,19 @@ export default function BuildAgentPage({ params }: Props) {
 
         <button
           type="button"
+          onClick={() => setPublishOpen(true)}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800"
         >
           <Save className="size-3.5" />
-          Register as agent
+          Publish as agent
         </button>
       </div>
+
+      <PublishWorkflowModal
+        workspaceId={workspaceId}
+        open={publishOpen}
+        onOpenChange={setPublishOpen}
+      />
 
       <div className="relative flex-1 overflow-hidden bg-neutral-50">
         {sessionState === "minting" && (

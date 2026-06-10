@@ -88,10 +88,18 @@ export type AgentOut = {
   version: number;
   language: string;
   classification: string;
+  kind: string;
   vetting_status: string;
   dify_app_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type WorkflowSource = {
+  id: string;
+  name: string;
+  active: boolean;
+  updated_at: string | null;
 };
 
 export type DifyAppOut = {
@@ -267,6 +275,14 @@ export const api = {
       request<AgentOut>(
         `/v1/workspaces/${workspaceId}/agents/import-from-dify`,
         { method: "POST", body: JSON.stringify({ dify_app_id: difyAppId }) },
+        token
+      ),
+    workflowSources: (workspaceId: string, token: string) =>
+      request<WorkflowSource[]>(`/v1/workspaces/${workspaceId}/agents/workflow-sources`, {}, token),
+    registerWorkflow: (workspaceId: string, workflowId: string, token: string) =>
+      request<{ agent: AgentOut; vetting_run_id: string }>(
+        `/v1/workspaces/${workspaceId}/agents/register-workflow`,
+        { method: "POST", body: JSON.stringify({ workflow_id: workflowId }) },
         token
       ),
     publish: (workspaceId: string, agentId: string, token: string) =>
