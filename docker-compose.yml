@@ -965,6 +965,7 @@ services:
       MCP_BUILTIN_HOSTNAMES: ${MCP_BUILTIN_HOSTNAMES:-wekala-mcp-time}
       # Phase 6 — Gatekeeper
       WEKALA_CLASSIFICATION_POLICY_PATH: /policies/classification.yaml
+      WEKALA_PDPL_POLICY_PATH: /policies/pdpl.yaml
       # Phase B multi-tenancy — Wekala→n8n auth bridge
       N8N_INTERNAL_URL: http://wekala-n8n:5678
       N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_USER_MANAGEMENT_JWT_SECRET}
@@ -1029,6 +1030,7 @@ services:
       DOCUMENT_CHUNK_OVERLAP: "128"
       SUPABASE_STORAGE_URL: http://supabase-storage:5000
       WEKALA_CLASSIFICATION_POLICY_PATH: /policies/classification.yaml
+      WEKALA_PDPL_POLICY_PATH: /policies/pdpl.yaml
       WEKALA_FIELD_ENCRYPTION_KEY: ${WEKALA_FIELD_ENCRYPTION_KEY}
     volumes:
       - ./infra/policies:/policies:ro

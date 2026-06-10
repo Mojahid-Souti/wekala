@@ -25,6 +25,7 @@ from wekala.adapters.scanner.base import AgentScanner, Finding, ScanInput
 from wekala.adapters.scanner.llm import LLMScanner
 from wekala.adapters.scanner.pii import PIIScanner
 from wekala.adapters.scanner.prompt_injection import RuleBasedInjectionScanner
+from wekala.adapters.scanner.workflow import WorkflowScanner
 from wekala.core.config import settings
 from wekala.core.constants import Action, AgentStatus, Outcome, ResourceType
 from wekala.core.policies.classification_policy import (
@@ -69,7 +70,8 @@ def _default_scanners() -> list[AgentScanner]:
 
     Both run side-by-side so if the LLM call times out or Ollama is
     unreachable, the regex baseline still surfaces findings — defence in
-    depth for PDPL compliance.
+    depth for PDPL compliance. WorkflowScanner adds the rule-based PDPL
+    checks for workflow agents (no-op on chat DSLs).
     """
     gateway = OllamaLLMAdapter(
         base_url=settings.ollama_url,
@@ -79,6 +81,7 @@ def _default_scanners() -> list[AgentScanner]:
         LLMScanner(gateway=gateway, timeout_s=settings.llm_scanner_timeout_s),
         PIIScanner(),
         RuleBasedInjectionScanner(),
+        WorkflowScanner(),
     ]
 
 

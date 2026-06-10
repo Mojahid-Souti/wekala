@@ -72,6 +72,19 @@ Categories you must detect:
    - config.tool_with_secret      : a tool config that embeds an API key,
      password, or token in plaintext
 
+4. Oman PDPL compliance (finding_type prefix "pdpl."). The definition may be a
+   chat agent or an automation workflow (a JSON document with "nodes"). Cite
+   the article in matched_preview, e.g. "(PDPL Art. 5)".
+   - pdpl.sensitive_category : processing health, genetic, biometric, ethnic,
+     religious, criminal-record, or sex-life data — requires a Ministry permit
+     (Executive Regulations Art. 5)
+   - pdpl.child_data         : collecting or processing children's data without
+     a guardian-consent mechanism (Art. 11-15)
+   - pdpl.marketing_consent  : sending marketing/commercial/social messages
+     with no consent or opt-out mechanism (Art. 22)
+   - pdpl.cross_border       : sending personal data to services outside Oman /
+     non-local processing (Art. 37-40; data sovereignty)
+
 Rules:
 - Use the smallest matching substring for `matched_full` — not the whole line.
 - `matched_preview` should redact the sensitive part (e.g. "OM81...7890" not the full IBAN).
