@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     wekala_n8n_owner_last_name: str = "System"
     # Fernet key — required for storing per-user n8n passwords at rest.
     wekala_field_encryption_key: str = ""
+    # Phase 15 Surface 3 — workflow agents: max seconds a webhook-triggered
+    # workflow may run before the invoke is cut off (workflows can be slow).
+    workflow_invoke_timeout_s: float = 60.0
 
     # Developer SDK & API (Phase 7)
     # Per-key sliding-window limits. Defaults match the CLAUDE.md plan.

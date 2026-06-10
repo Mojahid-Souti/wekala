@@ -146,6 +146,7 @@ class Agent(Base):
             "classification IN ('public','internal','restricted','confidential')",
             name="agent_valid_classification",
         ),
+        CheckConstraint("kind IN ('chat','workflow')", name="agent_valid_kind"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -164,7 +165,12 @@ class Agent(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     classification: Mapped[str] = mapped_column(String(20), nullable=False, default="internal")
+    # 'chat' = Dify-backed conversational agent; 'workflow' = n8n-workflow-backed
+    # automation agent (invoked via its webhook trigger). Phase 15 Surface 3.
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="chat")
     dify_app_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set only for kind='workflow': the n8n workflow id this agent wraps.
+    n8n_workflow_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Phase 6 — safety review state, independent of lifecycle `status`.
     vetting_status: Mapped[str] = mapped_column(String(30), nullable=False, default="unvetted")
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

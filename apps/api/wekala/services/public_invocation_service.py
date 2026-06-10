@@ -24,8 +24,10 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.agent_runtime.base import AgentRuntime
-from wekala.core.constants import Action, AgentStatus, Outcome, ResourceType
+from wekala.adapters.agent_runtime.n8n_workflow import N8nWorkflowRuntime
+from wekala.core.constants import Action, AgentKind, AgentStatus, Outcome, ResourceType
 from wekala.db.repositories.agent import AgentRepository
+from wekala.db.repositories.agent_version import AgentVersionRepository
 from wekala.db.repositories.audit import AuditRepository
 from wekala.services.rate_limit_service import RateLimitService
 
@@ -47,8 +49,10 @@ class PublicInvocationService:
     ) -> None:
         self._db = db
         self._agents = AgentRepository(db)
+        self._versions = AgentVersionRepository(db)
         self._audit = AuditRepository(db)
         self._runtime = runtime
+        self._workflow_runtime = N8nWorkflowRuntime()
         self._rate_limiter = rate_limiter
 
     async def invoke(
@@ -105,13 +109,38 @@ class PublicInvocationService:
                 ),
             )
 
+        # Resolve invocation inputs OUTSIDE the failure-translation block so
+        # config problems surface as clean 409s, not generic 502s.
+        workflow_definition: dict | None = None  # type: ignore[type-arg]
+        if agent.kind == AgentKind.WORKFLOW:
+            version = await self._versions.get(agent.id, agent.version)
+            workflow_definition = version.dify_dsl if version else None
+            if not workflow_definition:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Agent has no workflow definition",
+                )
+        elif not agent.dify_app_id:
+            # Chat agents register with the runtime lazily on first sandbox
+            # test; a published agent should always have an app id by then.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Agent is not registered with the runtime yet — run a sandbox test first",
+            )
+
         start = time.perf_counter()
         outcome = Outcome.SUCCESS
         try:
-            # TODO(phase-7-sdk): AgentRuntime protocol currently only exposes
-            # invoke_sandbox; production invoke() needs to be added to the
-            # protocol + DifyAdapter.
-            result = await self._runtime.invoke(agent, query)  # type: ignore[attr-defined]
+            if workflow_definition is not None:
+                result = await self._workflow_runtime.invoke_workflow(
+                    workflow_definition, {"query": query}
+                )
+            else:
+                result = await self._runtime.invoke_sandbox(
+                    app_id=agent.dify_app_id or "",
+                    query=query,
+                    user_id=f"public:{api_key_id}",
+                )
             answer = str(result.get("answer", ""))
             usage = dict(result.get("usage", {}))
         except Exception as exc:  # noqa: BLE001 — translate to 502, record audit, re-raise

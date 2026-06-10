@@ -33,6 +33,16 @@ class N8nSession:
     n8n_user_id: uuid.UUID
 
 
+@dataclass(frozen=True)
+class N8nWorkflowInfo:
+    """Lightweight view of one n8n workflow (backend-only; never branded in UI)."""
+
+    id: str
+    name: str
+    active: bool
+    updated_at: str | None
+
+
 class OwnerAlreadyExistsError(Exception):
     """Raised when POST /rest/owner/setup is called but n8n already has an owner."""
 
@@ -61,3 +71,15 @@ class N8nService(Protocol):
     ) -> None: ...
 
     async def login_user(self, email: str, password: str) -> N8nSession: ...
+
+    async def list_workflows(self, cookie: str) -> list[N8nWorkflowInfo]:
+        """List workflows owned by the session behind `cookie`. Backend-only."""
+        ...
+
+    async def get_workflow(self, cookie: str, workflow_id: str) -> dict:  # type: ignore[type-arg]
+        """Fetch one workflow's full JSON definition (nodes, connections)."""
+        ...
+
+    async def activate_workflow(self, cookie: str, workflow_id: str) -> None:
+        """Activate a workflow so its production webhook endpoints are live."""
+        ...

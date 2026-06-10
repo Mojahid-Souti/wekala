@@ -15,6 +15,7 @@ from wekala.adapters.n8n.base import (
     N8nService,
     N8nSession,
     N8nUser,
+    N8nWorkflowInfo,
     OwnerAlreadyExistsError,
 )
 
@@ -159,6 +160,47 @@ class N8nRestAdapter(N8nService):
                 n8n_user_id=n8n_user_id,
             )
         raise RuntimeError("n8n login rate limit not cleared after retry")
+
+    def _session_client(self, cookie: str) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_S, cookies={AUTH_COOKIE_NAME: cookie})
+
+    async def list_workflows(self, cookie: str) -> list[N8nWorkflowInfo]:
+        async with self._session_client(cookie) as client:
+            r = await client.get(f"{self._base_url}/rest/workflows")
+            r.raise_for_status()
+            rows = r.json().get("data", [])
+        return [
+            N8nWorkflowInfo(
+                id=str(w["id"]),
+                name=w.get("name", ""),
+                active=bool(w.get("active", False)),
+                updated_at=w.get("updatedAt"),
+            )
+            for w in rows
+            if w.get("id") is not None
+        ]
+
+    async def get_workflow(self, cookie: str, workflow_id: str) -> dict:  # type: ignore[type-arg]
+        async with self._session_client(cookie) as client:
+            r = await client.get(f"{self._base_url}/rest/workflows/{workflow_id}")
+            r.raise_for_status()
+            body = r.json()
+            data = body.get("data", body)
+            if not isinstance(data, dict) or "nodes" not in data:
+                raise RuntimeError("n8n returned an unexpected workflow shape")
+            return data
+
+    async def activate_workflow(self, cookie: str, workflow_id: str) -> None:
+        # n8n 2.x uses versioned publishing: activation is a dedicated route
+        # that takes the version to publish (PATCH {active: true} is silently
+        # ignored). Mirrors the editor's "Publish" button.
+        wf = await self.get_workflow(cookie, workflow_id)
+        async with self._session_client(cookie) as client:
+            r = await client.post(
+                f"{self._base_url}/rest/workflows/{workflow_id}/activate",
+                json={"versionId": wf.get("versionId")},
+            )
+            r.raise_for_status()
 
 
 # Safety: redact tokens from log messages where this adapter is invoked.

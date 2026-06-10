@@ -31,6 +31,8 @@ class AgentRepository:
         classification: str,
         language: str,
         dify_dsl: dict,  # type: ignore[type-arg]
+        kind: str = "chat",
+        n8n_workflow_id: str | None = None,
     ) -> Agent:
         """Insert new agent row. O(1)."""
         agent = Agent(
@@ -43,6 +45,8 @@ class AgentRepository:
             language=language,
             status="draft",
             version=1,
+            kind=kind,
+            n8n_workflow_id=n8n_workflow_id,
         )
         self._db.add(agent)
         await self._db.flush()

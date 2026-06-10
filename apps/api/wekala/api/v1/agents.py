@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 import yaml
 from fastapi import (
     APIRouter,
@@ -29,14 +30,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.agent_runtime.dify import DifyAdapter
 from wekala.adapters.auth.base import UserResult
-from wekala.api.deps import get_current_user, require_workspace_role
+from wekala.adapters.n8n.base import N8nService
+from wekala.api.deps import get_current_user, get_n8n_service, require_workspace_role
 from wekala.core.config import settings
 from wekala.core.constants import Role
 from wekala.db.models import Agent, AgentVersion
 from wekala.db.repositories.agent import AgentRepository
 from wekala.db.repositories.agent_version import AgentVersionRepository
 from wekala.db.session import get_db
+from wekala.services import n8n_provisioning
 from wekala.services.agent_service import AgentService
+from wekala.services.vetting_service import VettingService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -104,6 +108,7 @@ class AgentOut(BaseModel):
     version: int
     language: str
     classification: str
+    kind: str
     vetting_status: str
     dify_app_id: str | None
     created_at: str
@@ -122,6 +127,7 @@ class AgentOut(BaseModel):
             version=a.version,
             language=a.language,
             classification=a.classification,
+            kind=a.kind,
             vetting_status=a.vetting_status,
             dify_app_id=a.dify_app_id,
             created_at=a.created_at.isoformat(),
@@ -176,6 +182,24 @@ class ImportFromTemplateIn(BaseModel):
 
 class ImportFromDifyIn(BaseModel):
     dify_app_id: str = Field(..., min_length=1, max_length=100)
+
+
+class RegisterWorkflowIn(BaseModel):
+    workflow_id: str = Field(..., min_length=1, max_length=100)
+
+
+class WorkflowSourceOut(BaseModel):
+    """One workflow available to publish as an agent (engine-neutral shape)."""
+
+    id: str
+    name: str
+    active: bool
+    updated_at: str | None
+
+
+class RegisterWorkflowOut(BaseModel):
+    agent: AgentOut
+    vetting_run_id: uuid.UUID
 
 
 class DifyAppOut(BaseModel):
@@ -342,6 +366,89 @@ async def import_agent_from_dify(
         dify_app_id=body.dify_app_id,
     )
     return AgentOut.from_orm(agent)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/agents/workflow-sources",
+    response_model=list[WorkflowSourceOut],
+)
+async def list_workflow_sources(
+    workspace_id: uuid.UUID,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    n8n: Annotated[N8nService, Depends(get_n8n_service)],
+) -> list[WorkflowSourceOut]:
+    """The caller's own studio workflows, for the publish-as-agent picker.
+
+    Uses the caller's provisioned studio session — a user only ever sees
+    their own workflows. O(1) network.
+    """
+    user, _ = caller
+    session = await n8n_provisioning.ensure_session(
+        db=db, n8n=n8n, supabase_user_id=user.id, wekala_full_name=None
+    )
+    try:
+        workflows = await n8n.list_workflows(session.cookie_value)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Workflow engine unreachable"
+        ) from exc
+    return [
+        WorkflowSourceOut(id=w.id, name=w.name, active=w.active, updated_at=w.updated_at)
+        for w in workflows
+    ]
+
+
+@router.post(
+    "/workspaces/{workspace_id}/agents/register-workflow",
+    response_model=RegisterWorkflowOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register_workflow_agent(
+    workspace_id: uuid.UUID,
+    body: RegisterWorkflowIn,
+    background_tasks: BackgroundTasks,
+    caller: Annotated[tuple[UserResult, Role], Depends(require_workspace_role(Role.BUILDER))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    n8n: Annotated[N8nService, Depends(get_n8n_service)],
+) -> RegisterWorkflowOut:
+    """Publish a studio workflow as a workflow agent.
+
+    Fetches the workflow via the caller's OWN studio session (no cross-user
+    access), registers it as Draft + Unvetted, and immediately submits it to
+    the security-agent pipeline (Phase 6) — the publish modal polls the
+    returned vetting run for progress. O(n) over workflow nodes.
+    """
+    user, _ = caller
+    session = await n8n_provisioning.ensure_session(
+        db=db, n8n=n8n, supabase_user_id=user.id, wekala_full_name=None
+    )
+    try:
+        definition = await n8n.get_workflow(session.cookie_value, body.workflow_id)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found"
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Workflow engine unreachable"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Workflow engine unreachable"
+        ) from exc
+
+    svc = AgentService(db, _runtime())
+    agent = await svc.register_workflow_agent(
+        workspace_id=workspace_id,
+        owner_id=user.id,
+        workflow_id=body.workflow_id,
+        definition=definition,
+    )
+    run = await VettingService(db).submit_for_review(
+        agent=agent, actor_id=user.id, background_tasks=background_tasks
+    )
+    return RegisterWorkflowOut(agent=AgentOut.from_orm(agent), vetting_run_id=run.id)
 
 
 @router.get("/workspaces/{workspace_id}/agents/{agent_id}", response_model=AgentOut)

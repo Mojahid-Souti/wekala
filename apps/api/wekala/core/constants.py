@@ -116,6 +116,13 @@ class AgentStatus(StrEnum):
     ARCHIVED = "archived"
 
 
+class AgentKind(StrEnum):
+    """What executes the agent: a chat app (Dify) or a workflow webhook (n8n)."""
+
+    CHAT = "chat"
+    WORKFLOW = "workflow"
+
+
 class Classification(StrEnum):
     PUBLIC = "public"
     INTERNAL = "internal"

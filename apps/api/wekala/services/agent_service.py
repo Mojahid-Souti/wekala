@@ -12,6 +12,7 @@ All state-changing methods write an audit log entry as fire-and-forget.
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -22,18 +23,24 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wekala.adapters.agent_runtime.base import AgentDefinitionError, AgentRuntime
+from wekala.adapters.agent_runtime.n8n_workflow import (
+    N8nWorkflowRuntime,
+    WorkflowNotInvokableError,
+)
 from wekala.core.config import settings
 
 if TYPE_CHECKING:
     from wekala.services.bazaar_service import BazaarService
 from wekala.core.constants import (
     Action,
+    AgentKind,
     AgentSource,
     AgentStatus,
     Classification,
     Outcome,
     ResourceType,
 )
+from wekala.core.utils.workflow_validator import WORKFLOW_MAX_BYTES, validate_workflow
 from wekala.core.utils.yaml_validator import validate_yaml
 from wekala.db.models import Agent
 from wekala.db.repositories.agent import AgentRepository
@@ -50,6 +57,12 @@ _ALLOWED_TRANSITIONS: dict[AgentStatus, set[AgentStatus]] = {
     AgentStatus.PUBLISHED: {AgentStatus.ARCHIVED},
     AgentStatus.ARCHIVED: set(),
 }
+
+
+async def _as_stream(result: dict) -> AsyncIterator[dict]:  # type: ignore[type-arg]
+    """Adapt a one-shot invoke result to the streaming shape (token, then usage)."""
+    yield {"token": str(result.get("answer", ""))}
+    yield {"usage": result.get("usage", {})}
 
 
 def _usage_metadata(dify_metadata: dict) -> dict | None:  # type: ignore[type-arg]
@@ -71,6 +84,7 @@ class AgentService:
     def __init__(self, db: AsyncSession, runtime: AgentRuntime) -> None:
         self._db = db
         self._runtime = runtime
+        self._workflow_runtime = N8nWorkflowRuntime()
         self._agents = AgentRepository(db)
         self._versions = AgentVersionRepository(db)
         self._imports = AgentImportRepository(db)
@@ -195,6 +209,70 @@ class AgentService:
             raw_yaml=dsl_yaml.encode("utf-8"),
             filename=f"dify-{dify_app_id}.yaml",
         )
+
+    async def register_workflow_agent(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        workflow_id: str,
+        definition: dict[str, Any],
+    ) -> Agent:
+        """Register an n8n workflow as a workflow agent (Draft + Unvetted).
+
+        The caller (endpoint) fetches `definition` via the user's own studio
+        session, so a user can only register workflows they can access. The
+        definition is stored as the version snapshot (same column the chat
+        agents use) so versioning, vetting, and diffing work unchanged.
+        O(n) over nodes for validation.
+        """
+        if len(json.dumps(definition)) > WORKFLOW_MAX_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Workflow definition exceeds 1 MiB limit",
+            )
+        definition, errors = validate_workflow(definition)
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"errors": errors},
+            )
+
+        raw_name = str(definition.get("name") or "Workflow agent").strip()
+        name = raw_name[:100] if len(raw_name) >= 2 else "Workflow agent"
+
+        async with self._db.begin_nested():
+            agent = await self._agents.create(
+                workspace_id=workspace_id,
+                name=name,
+                description="Automation workflow published from the studio.",
+                owner_id=owner_id,
+                tags=[],
+                classification=Classification.INTERNAL,
+                language="en",
+                dify_dsl=definition,
+                kind=AgentKind.WORKFLOW,
+                n8n_workflow_id=workflow_id,
+            )
+            await self._versions.create(
+                agent_id=agent.id,
+                version_num=1,
+                name=name,
+                description=agent.description,
+                dify_dsl=definition,
+                changed_by=owner_id,
+                change_note="Registered from workflow studio",
+            )
+            await self._audit.record(
+                action=Action.AGENT_CREATE,
+                outcome=Outcome.SUCCESS,
+                actor_user_id=owner_id,
+                actor_workspace_id=workspace_id,
+                resource_type=ResourceType.AGENT,
+                resource_id=agent.id,
+                metadata={"kind": AgentKind.WORKFLOW, "workflow_id": workflow_id},
+            )
+        return agent
 
     async def import_from_template(
         self,
@@ -556,13 +634,15 @@ class AgentService:
                 ),
             )
 
-        app_id = await self._ensure_registered(agent)
-
-        result = await self._runtime.invoke_sandbox(
-            app_id=app_id,
-            query=query,
-            user_id=str(actor_id),
-        )
+        if agent.kind == AgentKind.WORKFLOW:
+            result = await self._invoke_workflow(agent, {"query": query})
+        else:
+            app_id = await self._ensure_registered(agent)
+            result = await self._runtime.invoke_sandbox(
+                app_id=app_id,
+                query=query,
+                user_id=str(actor_id),
+            )
 
         await self._audit.record(
             action=Action.AGENT_TEST,
@@ -601,7 +681,15 @@ class AgentService:
                     " invocations per day"
                 ),
             )
-        app_id = await self._ensure_registered(agent)
+
+        # Workflow agents don't stream — run once and emit the result as a
+        # single token + usage so the same SSE pipeline serves both kinds.
+        if agent.kind == AgentKind.WORKFLOW:
+            result = await self._invoke_workflow(agent, {"query": query})
+            source: AsyncIterator[dict] = _as_stream(result)  # type: ignore[type-arg]
+        else:
+            app_id = await self._ensure_registered(agent)
+            source = self._runtime.stream_sandbox(app_id=app_id, query=query, user_id=str(actor_id))
 
         # Capture before the first yield: after it, the request session is closed.
         workspace_id = agent.workspace_id
@@ -609,9 +697,7 @@ class AgentService:
         completed = False
         usage_meta: dict = {}  # type: ignore[type-arg]
         try:
-            async for item in self._runtime.stream_sandbox(
-                app_id=app_id, query=query, user_id=str(actor_id)
-            ):
+            async for item in source:
                 if "usage" in item:
                     usage_meta = item["usage"]
                 yield item
@@ -632,6 +718,43 @@ class AgentService:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _invoke_workflow(self, agent: Agent, payload: dict[str, Any]) -> dict[str, Any]:
+        """Run a workflow agent via its webhook; map failures to clean HTTP errors.
+
+        404 from the webhook almost always means the workflow isn't active in
+        the studio — say so instead of a generic 502. O(1) network.
+        """
+        version = await self._versions.get(agent.id, agent.version)
+        definition = version.dify_dsl if version else None
+        if not definition:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Agent has no workflow definition",
+            )
+        try:
+            return await self._workflow_runtime.invoke_workflow(definition, payload)
+        except WorkflowNotInvokableError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+            ) from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "The workflow isn't active yet — activate it in the studio "
+                        "(toggle it on), then run again"
+                    ),
+                ) from e
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail="Workflow run failed"
+            ) from e
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Workflow engine unreachable",
+            ) from e
 
     async def _ensure_registered(self, agent: Agent) -> str:
         """Return a usable Dify app_id, registering the agent lazily on first use.
