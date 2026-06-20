@@ -1,8 +1,8 @@
 /**
- * Admin Panel shell — starter. Replace the placeholder with your screens.
- * Add pages under src/pages/, components under src/components/, and route
- * between them however you like (start simple with state; add a router later).
+ * Admin Panel shell — wires in the screens. Add pages under src/pages/,
+ * components under src/components/, hooks under src/hooks/.
  */
+import { ReportsPage } from "@/pages/ReportsPage";
 import { LocaleToggle } from "@/components/LocaleToggle";
 
 const ARABIC_WEIGHTS = [
@@ -27,6 +27,7 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        <ReportsPage />
         {/* L6 verification surface: Arabic webfont (IBM Plex Sans Arabic), loaded
             self-hosted and applied via locale-scoped CSS. The block below is
             marked lang="ar" so it always renders in the Arabic face (proving the
