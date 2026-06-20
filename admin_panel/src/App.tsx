@@ -2,6 +2,7 @@
  * Admin Panel shell — wires in the screens. Add pages under src/pages/,
  * components under src/components/, hooks under src/hooks/.
  */
+import { VoicePage } from "@/pages/VoicePage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { AuditLogPage } from "@/pages/AuditLogPage";
 import { ReportsPage } from "@/pages/ReportsPage";
@@ -29,6 +30,7 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        <VoicePage />
         <DashboardPage />
         <AuditLogPage />
         <ReportsPage />
