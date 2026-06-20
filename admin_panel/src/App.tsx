@@ -2,6 +2,7 @@
  * Admin Panel shell — wires in the screens. Add pages under src/pages/,
  * components under src/components/, hooks under src/hooks/.
  */
+import { AuditLogPage } from "@/pages/AuditLogPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { LocaleToggle } from "@/components/LocaleToggle";
 
@@ -27,6 +28,7 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        <AuditLogPage />
         <ReportsPage />
         {/* L6 verification surface: Arabic webfont (IBM Plex Sans Arabic), loaded
             self-hosted and applied via locale-scoped CSS. The block below is
