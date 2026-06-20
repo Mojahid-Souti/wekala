@@ -3,6 +3,10 @@
  * components under src/components/, hooks under src/hooks/.
  */
 import { SilaPage } from "@/pages/SilaPage";
+import { VoicePage } from "@/pages/VoicePage";
+import { DashboardPage } from "@/pages/DashboardPage";
+import { AuditLogPage } from "@/pages/AuditLogPage";
+import { ReportsPage } from "@/pages/ReportsPage";
 import { LocaleToggle } from "@/components/LocaleToggle";
 
 const ARABIC_WEIGHTS = [
@@ -28,6 +32,10 @@ export function App() {
 
       <main className="mx-auto max-w-6xl px-6 py-8">
         <SilaPage />
+        <VoicePage />
+        <DashboardPage />
+        <AuditLogPage />
+        <ReportsPage />
         {/* L6 verification surface: Arabic webfont (IBM Plex Sans Arabic), loaded
             self-hosted and applied via locale-scoped CSS. The block below is
             marked lang="ar" so it always renders in the Arabic face (proving the
