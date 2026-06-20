@@ -17,6 +17,10 @@ export default {
       animation: {
         breathe: "breathe 3s ease-in-out infinite",
         "spin-slow": "spin-slow 3.5s linear infinite",
+      // `font-arabic` utility for opt-in Arabic typography. Resolves to the
+      // --font-arabic stack defined in src/index.css (single source of truth).
+      fontFamily: {
+        arabic: ["var(--font-arabic)"],
       },
     },
   },
