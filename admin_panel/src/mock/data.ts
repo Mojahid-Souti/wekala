@@ -16,8 +16,16 @@ export const MOCK_AUDIT: AuditEvent[] = [
 ];
 
 export const MOCK_REPORTS: AgentReport[] = [
-  { id: "r1", agent_id: "ag2", workspace_id: "w1", reporter_id: "u3", reason: "Returns outdated policy info.", status: "open", created_at: new Date().toISOString(), resolved_at: null, resolved_by: null },
-  { id: "r2", agent_id: "ag5", workspace_id: "w1", reporter_id: "u2", reason: "Tried to email data externally.", status: "reviewing", created_at: new Date(Date.now() - 86400e3).toISOString(), resolved_at: null, resolved_by: null },
+  { id: "r1",  agent_id: "ag2", workspace_id: "w1", reporter_id: "u3", reason: "Returns outdated policy info.",                          status: "open",       created_at: new Date(Date.now() -      0).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r2",  agent_id: "ag5", workspace_id: "w1", reporter_id: "u2", reason: "Tried to email data externally.",                        status: "reviewing",  created_at: new Date(Date.now() -  86400e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r3",  agent_id: "ag1", workspace_id: "w1", reporter_id: "u2", reason: "Provided confidential HR data without verification.",    status: "resolved",   created_at: new Date(Date.now() - 172800e3).toISOString(), resolved_at: new Date(Date.now() -  43200e3).toISOString(), resolved_by: "u1" },
+  { id: "r4",  agent_id: "ag2", workspace_id: "w1", reporter_id: "u1", reason: "Response time exceeds 30 seconds consistently.",         status: "dismissed",  created_at: new Date(Date.now() - 259200e3).toISOString(), resolved_at: new Date(Date.now() - 172800e3).toISOString(), resolved_by: "u1" },
+  { id: "r5",  agent_id: "ag1", workspace_id: "w1", reporter_id: "u3", reason: "Outputs inconsistent with policy version 3.2.",          status: "open",       created_at: new Date(Date.now() - 345600e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r6",  agent_id: "ag5", workspace_id: "w1", reporter_id: "u1", reason: "Sent weekly digest to an external recipient.",           status: "reviewing",  created_at: new Date(Date.now() - 432000e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r7",  agent_id: "ag2", workspace_id: "w1", reporter_id: "u3", reason: "Listed incorrect cost-center codes on three invoices.",  status: "resolved",   created_at: new Date(Date.now() - 518400e3).toISOString(), resolved_at: new Date(Date.now() - 432000e3).toISOString(), resolved_by: "u1" },
+  { id: "r8",  agent_id: "ag5", workspace_id: "w1", reporter_id: "u2", reason: "Report generated with wrong date range.",               status: "dismissed",  created_at: new Date(Date.now() - 604800e3).toISOString(), resolved_at: new Date(Date.now() - 518400e3).toISOString(), resolved_by: "u1" },
+  { id: "r9",  agent_id: "ag1", workspace_id: "w1", reporter_id: "u2", reason: "Hallucinated section numbers in policy responses.",      status: "open",       created_at: new Date(Date.now() - 691200e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r10", agent_id: "ag2", workspace_id: "w1", reporter_id: "u1", reason: "Accessed a document outside the permitted knowledge base.", status: "reviewing", created_at: new Date(Date.now() - 777600e3).toISOString(), resolved_at: null,                                         resolved_by: null },
 ];
 
 export const MOCK_KPIS: Kpis = {
