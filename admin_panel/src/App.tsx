@@ -1,5 +1,7 @@
 import { Composer } from "@/components/chat/Composer";
+import { DemoPlayer } from "@/components/chat/DemoPlayer";
 import { MessageList } from "@/components/chat/MessageList";
+import { useDemoPlayer } from "@/components/chat/useDemoPlayer";
 import type { ChatMessage } from "@/types/api";
 import { useCallback, useState } from "react";
 
@@ -16,6 +18,7 @@ function makeId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// Module-level so reset() can restore the original greeting without re-creating it.
 const SEED_MESSAGES: ChatMessage[] = [
   {
     id: makeId(),
@@ -30,6 +33,11 @@ export function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(SEED_MESSAGES);
   const [isTyping, setIsTyping] = useState(false);
 
+  const { pause, play, reset, selectScenario, selectedScenario, status, stepIndex } = useDemoPlayer(
+    { initialMessages: SEED_MESSAGES, setIsTyping, setMessages }
+  );
+
+  // Manual send — active when the demo is paused, done, or no scenario is running.
   const handleSend = useCallback((text: string) => {
     const userMsg: ChatMessage = {
       id: makeId(),
@@ -37,7 +45,6 @@ export function App() {
       content: text,
       timestamp: new Date().toISOString(),
     };
-
     setMessages((prev) => [...prev, userMsg]);
     setIsTyping(true);
 
@@ -70,9 +77,20 @@ export function App() {
         </div>
       </header>
 
+      <DemoPlayer
+        selectedScenario={selectedScenario}
+        status={status}
+        stepIndex={stepIndex}
+        onPause={pause}
+        onPlay={play}
+        onReset={reset}
+        onSelectScenario={selectScenario}
+      />
+
       <MessageList messages={messages} isTyping={isTyping} />
 
-      <Composer onSend={handleSend} disabled={isTyping} />
+      {/* Composer is disabled during active playback; re-enabled on pause/reset/done. */}
+      <Composer onSend={handleSend} disabled={isTyping || status === "playing"} />
     </div>
   );
 }
