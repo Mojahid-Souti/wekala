@@ -1,27 +1,35 @@
-/* L6 — Arabic webfont (IBM Plex Sans Arabic), self-hosted via @fontsource.
- * Only the Arabic glyph subset is imported, so the payload stays small and
- * nothing is fetched off-machine (fits Wekala's sovereign / offline ethos).
- * @import rules must precede all other CSS, hence they sit above @tailwind. */
-@import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
-@import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
-@import "@fontsource/ibm-plex-sans-arabic/arabic-600.css";
-@import "@fontsource/ibm-plex-sans-arabic/arabic-700.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* Single source of truth for the Arabic font stack. Referenced by the
-   * locale-scoped rule below and by tailwind's `font-arabic` utility. */
   :root {
-    --font-arabic: "IBM Plex Sans Arabic", "Segoe UI", system-ui, sans-serif;
+    /* shadcn/ui — neutral base (HSL values without wrapper for opacity-modifier support) */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+    --radius: 0.625rem;
+
+    /* Arabic font stack for bilingual content — no external package required */
+    --font-arabic: "Segoe UI", "Arial Unicode MS", system-ui, sans-serif;
   }
 
-  /* Locale-scoped: Arabic content gets the Arabic typeface; Latin/default UI
-   * keeps the system sans stack. Scoped to both :lang(ar) and dir="rtl" so it
-   * activates however L4's locale switching marks the document — set
-   * <html lang="ar" dir="rtl"> and these rules apply with no further wiring. */
+  /* Locale-scoped: Arabic content gets the Arabic typeface */
   :lang(ar),
   [lang="ar"],
   [dir="rtl"] {

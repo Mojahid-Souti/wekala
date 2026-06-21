@@ -1,97 +1,78 @@
-import { AdminLayout } from "@/components/layout/AdminLayout";
+import { Composer } from "@/components/chat/Composer";
+import { MessageList } from "@/components/chat/MessageList";
+import type { ChatMessage } from "@/types/api";
+import { useCallback, useState } from "react";
+
+const MOCK_REPLIES: string[] = [
+  "I've checked your workspace — 3 published agents look relevant. Want me to walk you through them?",
+  "Got it. What data sources should this agent access? That determines the classification level.",
+  "Interesting request. Your audit log shows a similar flow ran last quarter. I can adapt it — shall I?",
+  "Let me step through the options. First: what classification level should this agent have?",
+];
+
+let replyIndex = 0;
+
+function makeId(): string {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+const SEED_MESSAGES: ChatMessage[] = [
+  {
+    id: makeId(),
+    role: "assistant",
+    content:
+      "مرحباً — I'm Sila, your AI concierge. I can help you find agents, draft workflows, review reports, or answer questions about your workspace. How can I help today?",
+    timestamp: new Date().toISOString(),
+  },
+];
 
 export function App() {
-  return <AdminLayout />;
-import { SettingsPage } from "@/pages/SettingsPage";
-import { useI18n } from "@/lib/i18n/I18nProvider";
-/**
- * Admin Panel shell — wires in the screens. Add pages under src/pages/,
- * components under src/components/, hooks under src/hooks/.
- */
-import { SilaPage } from "@/pages/SilaPage";
-import { VoicePage } from "@/pages/VoicePage";
-import { DashboardPage } from "@/pages/DashboardPage";
-import { AuditLogPage } from "@/pages/AuditLogPage";
-import { ReportsPage } from "@/pages/ReportsPage";
-import { LocaleToggle } from "@/components/LocaleToggle";
+  const [messages, setMessages] = useState<ChatMessage[]>(SEED_MESSAGES);
+  const [isTyping, setIsTyping] = useState(false);
 
-const ARABIC_WEIGHTS = [
-  { weight: 400, label: "Regular", className: "font-normal" },
-  { weight: 500, label: "Medium", className: "font-medium" },
-  { weight: 600, label: "Semibold", className: "font-semibold" },
-  { weight: 700, label: "Bold", className: "font-bold" },
-] as const;
+  const handleSend = useCallback((text: string) => {
+    const userMsg: ChatMessage = {
+      id: makeId(),
+      role: "user",
+      content: text,
+      timestamp: new Date().toISOString(),
+    };
 
-export function App() {
-  const { t } = useI18n();
+    setMessages((prev) => [...prev, userMsg]);
+    setIsTyping(true);
+
+    const delay = 600 + Math.random() * 300;
+    setTimeout(() => {
+      const reply = MOCK_REPLIES[replyIndex % MOCK_REPLIES.length];
+      replyIndex += 1;
+      const assistantMsg: ChatMessage = {
+        id: makeId(),
+        role: "assistant",
+        content: reply,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+      setIsTyping(false);
+    }, delay);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900">
-      <header className="border-neutral-200 border-b bg-white px-6 py-4">
-        <h1 className="font-semibold text-lg tracking-tight">{t("app.title")}</h1>
-      </header>
-      <main className="mx-auto max-w-3xl px-6 py-8">
-        <SettingsPage />
-      <header className="flex items-start justify-between border-neutral-200 border-b bg-white px-6 py-4">
-        <div>
-          <h1 className="font-semibold text-lg tracking-tight">Sila · Admin Panel</h1>
-          <p className="text-neutral-500 text-sm">
-            Standalone work area. Build your assigned screen here; it gets integrated into
-            the main app later.
-          </p>
+    <div className="flex h-screen flex-col overflow-hidden bg-neutral-50">
+      <header className="shrink-0 border-b border-neutral-200 bg-white px-4 py-3">
+        <div className="mx-auto flex max-w-2xl items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-sm font-semibold text-white select-none">
+            ص
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight text-neutral-900">صِلة · Sila</p>
+            <p className="text-xs text-neutral-500">AI Platform Concierge</p>
+          </div>
         </div>
-        <LocaleToggle />
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
-        <SilaPage />
-        <VoicePage />
-        <DashboardPage />
-        <AuditLogPage />
-        <ReportsPage />
-        {/* L6 verification surface: Arabic webfont (IBM Plex Sans Arabic), loaded
-            self-hosted and applied via locale-scoped CSS. The block below is
-            marked lang="ar" so it always renders in the Arabic face (proving the
-            :lang(ar) scoping); the header toggle flips <html lang/dir> to show
-            the document-level switch. */}
-        <section className="rounded-xl border border-neutral-200 bg-white p-8">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="font-semibold text-base text-neutral-800">
-              Arabic typography — IBM Plex Sans Arabic
-            </h2>
-            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 font-medium text-neutral-600 text-xs">
-              L6 · locale-scoped font
-            </span>
-          </div>
+      <MessageList messages={messages} isTyping={isTyping} />
 
-          <div lang="ar" dir="rtl" className="space-y-5">
-            <p className="text-2xl leading-relaxed font-semibold">
-              مرحبًا بك في لوحة تحكم صلة
-            </p>
-            <p className="text-neutral-600 leading-loose">
-              تُدار الوكلاء والأعضاء والتقارير وسجلّات التدقيق من هذه اللوحة. هذا
-              النص يستخدم خط IBM Plex Sans Arabic للتأكد من وضوح القراءة وجمال
-              العرض باللغة العربية.
-            </p>
-
-            <div className="grid gap-3 border-neutral-100 border-t pt-5 sm:grid-cols-2">
-              {ARABIC_WEIGHTS.map(({ weight, label, className }) => (
-                <div key={weight} className="flex items-baseline justify-between gap-4">
-                  <span dir="ltr" className="text-neutral-400 text-xs">
-                    {label} · {weight}
-                  </span>
-                  <span className={`text-lg ${className}`}>الذكاء الاصطناعي السيادي</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <p className="mt-4 text-center text-neutral-400 text-xs">
-          Reference shapes: <code className="rounded bg-neutral-100 px-1">src/types/api.ts</code>{" "}
-          · mock data: <code className="rounded bg-neutral-100 px-1">src/mock/data.ts</code>
-        </p>
-      </main>
+      <Composer onSend={handleSend} disabled={isTyping} />
     </div>
   );
 }

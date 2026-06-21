@@ -71,3 +71,10 @@ export type Agent = {
   version: number;
   created_at: string;
 };
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string; // ISO 8601
+};
