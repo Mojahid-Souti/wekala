@@ -4,9 +4,16 @@
 import type { Agent, AgentReport, AuditEvent, Kpis, Member } from "@/types/api";
 
 export const MOCK_MEMBERS: Member[] = [
-  { user_id: "u1", role: "admin", email: "amal@omantel.om", full_name: "Amal A.", invited_by: null },
-  { user_id: "u2", role: "builder", email: "khalid@omantel.om", full_name: "Khalid S.", invited_by: "u1" },
-  { user_id: "u3", role: "viewer", email: "noor@omantel.om", full_name: "Noor H.", invited_by: "u1" },
+  { user_id: "u1",  role: "admin",    email: "amal@omantel.om",   full_name: "Amal Al-Rashdi",    invited_by: null  },
+  { user_id: "u2",  role: "builder",  email: "khalid@omantel.om", full_name: "Khalid Al-Siyabi",  invited_by: "u1"  },
+  { user_id: "u3",  role: "viewer",   email: "noor@omantel.om",   full_name: "Noor Al-Habsi",     invited_by: "u1"  },
+  { user_id: "u4",  role: "reviewer", email: "sara@omantel.om",   full_name: "Sara Al-Maamari",   invited_by: "u1"  },
+  { user_id: "u5",  role: "hirer",    email: "fahad@omantel.om",  full_name: "Fahad Al-Kindi",    invited_by: "u2"  },
+  { user_id: "u6",  role: "builder",  email: "maryam@omantel.om", full_name: "Maryam Al-Balushi", invited_by: "u1"  },
+  { user_id: "u7",  role: "viewer",   email: "omar@omantel.om",   full_name: "Omar Al-Rawahi",    invited_by: "u2"  },
+  { user_id: "u8",  role: "reviewer", email: "lina@omantel.om",   full_name: "Lina Al-Tobi",      invited_by: "u1"  },
+  { user_id: "u9",  role: "hirer",    email: "yousef@omantel.om", full_name: "Yousef Al-Busaidi", invited_by: "u3"  },
+  { user_id: "u10", role: "builder",  email: "hessa@omantel.om",  full_name: "Hessa Al-Nabhani",  invited_by: "u1"  },
 ];
 
 export const MOCK_AUDIT: AuditEvent[] = [
@@ -36,8 +43,16 @@ export const MOCK_AUDIT: AuditEvent[] = [
 ];
 
 export const MOCK_REPORTS: AgentReport[] = [
-  { id: "r1", agent_id: "ag2", workspace_id: "w1", reporter_id: "u3", reason: "Returns outdated policy info.", status: "open", created_at: new Date().toISOString(), resolved_at: null, resolved_by: null },
-  { id: "r2", agent_id: "ag5", workspace_id: "w1", reporter_id: "u2", reason: "Tried to email data externally.", status: "reviewing", created_at: new Date(Date.now() - 86400e3).toISOString(), resolved_at: null, resolved_by: null },
+  { id: "r1",  agent_id: "ag2", workspace_id: "w1", reporter_id: "u3", reason: "Returns outdated policy info.",                          status: "open",       created_at: new Date(Date.now() -      0).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r2",  agent_id: "ag5", workspace_id: "w1", reporter_id: "u2", reason: "Tried to email data externally.",                        status: "reviewing",  created_at: new Date(Date.now() -  86400e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r3",  agent_id: "ag1", workspace_id: "w1", reporter_id: "u2", reason: "Provided confidential HR data without verification.",    status: "resolved",   created_at: new Date(Date.now() - 172800e3).toISOString(), resolved_at: new Date(Date.now() -  43200e3).toISOString(), resolved_by: "u1" },
+  { id: "r4",  agent_id: "ag2", workspace_id: "w1", reporter_id: "u1", reason: "Response time exceeds 30 seconds consistently.",         status: "dismissed",  created_at: new Date(Date.now() - 259200e3).toISOString(), resolved_at: new Date(Date.now() - 172800e3).toISOString(), resolved_by: "u1" },
+  { id: "r5",  agent_id: "ag1", workspace_id: "w1", reporter_id: "u3", reason: "Outputs inconsistent with policy version 3.2.",          status: "open",       created_at: new Date(Date.now() - 345600e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r6",  agent_id: "ag5", workspace_id: "w1", reporter_id: "u1", reason: "Sent weekly digest to an external recipient.",           status: "reviewing",  created_at: new Date(Date.now() - 432000e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r7",  agent_id: "ag2", workspace_id: "w1", reporter_id: "u3", reason: "Listed incorrect cost-center codes on three invoices.",  status: "resolved",   created_at: new Date(Date.now() - 518400e3).toISOString(), resolved_at: new Date(Date.now() - 432000e3).toISOString(), resolved_by: "u1" },
+  { id: "r8",  agent_id: "ag5", workspace_id: "w1", reporter_id: "u2", reason: "Report generated with wrong date range.",               status: "dismissed",  created_at: new Date(Date.now() - 604800e3).toISOString(), resolved_at: new Date(Date.now() - 518400e3).toISOString(), resolved_by: "u1" },
+  { id: "r9",  agent_id: "ag1", workspace_id: "w1", reporter_id: "u2", reason: "Hallucinated section numbers in policy responses.",      status: "open",       created_at: new Date(Date.now() - 691200e3).toISOString(), resolved_at: null,                                          resolved_by: null },
+  { id: "r10", agent_id: "ag2", workspace_id: "w1", reporter_id: "u1", reason: "Accessed a document outside the permitted knowledge base.", status: "reviewing", created_at: new Date(Date.now() - 777600e3).toISOString(), resolved_at: null,                                         resolved_by: null },
 ];
 
 export const MOCK_KPIS: Kpis = {

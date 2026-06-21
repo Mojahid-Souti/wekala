@@ -1,3 +1,7 @@
+import { AdminLayout } from "@/components/layout/AdminLayout";
+
+export function App() {
+  return <AdminLayout />;
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 /**
