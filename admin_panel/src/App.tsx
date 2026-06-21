@@ -1,3 +1,5 @@
+import { SettingsPage } from "@/pages/SettingsPage";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 /**
  * Admin Panel shell — wires in the screens. Add pages under src/pages/,
  * components under src/components/, hooks under src/hooks/.
@@ -17,8 +19,15 @@ const ARABIC_WEIGHTS = [
 ] as const;
 
 export function App() {
+  const { t } = useI18n();
+
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
+      <header className="border-neutral-200 border-b bg-white px-6 py-4">
+        <h1 className="font-semibold text-lg tracking-tight">{t("app.title")}</h1>
+      </header>
+      <main className="mx-auto max-w-3xl px-6 py-8">
+        <SettingsPage />
       <header className="flex items-start justify-between border-neutral-200 border-b bg-white px-6 py-4">
         <div>
           <h1 className="font-semibold text-lg tracking-tight">Sila · Admin Panel</h1>
